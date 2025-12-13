@@ -8,7 +8,7 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS 
+# Styling CSS (Padding judul pas, margin grafik nol)
 st.markdown("""
 <style>
     .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
@@ -90,7 +90,7 @@ def load_data():
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # V63 FIX: PEMBERSIH BULAN AGRESIF (Fix Filter)
+        # V64 FIX: PEMBERSIH BULAN (Hanya TRIM dan jadi Title)
         if 'BULAN' in df.columns:
             df['BULAN'] = df['BULAN'].astype(str).str.strip().str.title()
             
@@ -144,6 +144,7 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
+    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -154,13 +155,12 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            # Sortir bulan agar bulan terbaru ada di bawah (atau urut kronologis jika ada nama bulan)
-            months = sorted(months, reverse=True)
-            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=0 if months else 0)
-
+            # Urutan bulan berdasarkan abjad, tapi harusnya data sudah bersih
+            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
             sel_mon = "Semua"
 
+    # APPLY FILTER (INI HARUS BERHASIL)
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
@@ -214,7 +214,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (V63 - SORTING DAN LABEL MUTLAK)
+        # 4. GRAFIK TREN HARIAN (V64 - SORTING & LABEL MUTLAK)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -228,7 +228,7 @@ else:
                 # 1. KOLOM LABEL (SINGKAT: '01 Dec')
                 daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
                 
-                # 2. SORTING KRONOLOGIS (WAJIB DILAKUKAN SEBELUM PLOT)
+                # 2. SORTING KRONOLOGIS (WAJIB)
                 daily = daily.sort_values('TANGGAL')
                 
                 # 3. PLOTTING
@@ -243,7 +243,6 @@ else:
                     xaxis=dict(
                         type='category', 
                         tickangle=-45,
-                        # Plotly mengambil urutan dari TANGGAL_LABEL yang sudah diurutkan.
                         categoryorder='array',
                         categoryarray=daily['TANGGAL_LABEL'].tolist()
                     )
