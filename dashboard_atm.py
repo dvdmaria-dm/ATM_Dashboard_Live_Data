@@ -11,14 +11,14 @@ st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_
 # Styling CSS (Font Ultra-Compact Global dan Text Center Alignment)
 st.markdown("""
 <style>
-    /* V71 FIX: MENGECILKAN FONT GLOBAL & RATA TENGAH TABEL */
+    /* V72 FIX: TAMPILAN LEBIH PENDEK & RATA TENGAH MUTLAK */
     
     /* Font Global Lebih Kecil (12px) */
     html, body, [class*="st-emotion-"] { 
         font-size: 12px; 
     }
     h1, h2, h3, h4, h5, h6 { 
-        font-size: 1.1em !important; /* Header dikecilkan */
+        font-size: 1.1em !important; 
     }
 
     .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
@@ -26,12 +26,17 @@ st.markdown("""
     /* Font Dataframe (Tabel) Ultra-Compact (9px) */
     .dataframe {
         font-size: 9px !important; 
-        text-align: center; /* Rata tengah untuk tabel */
+        text-align: center;
     }
     
     /* Paksa semua sel di dalam tabel rata tengah */
-    .dataframe td, .dataframe th {
+    .dataframe td {
         text-align: center !important;
+    }
+    
+    /* Khusus Header Baris Pertama (Cabang/TID/Lokasi) Wajib Kiri */
+    .dataframe tbody th {
+        text-align: left !important;
     }
     
     th {background-color: #262730 !important; color: white !important;}
@@ -43,7 +48,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. KONEKSI DATA ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
+SHEET_URL = "https://docs.google.com/sheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
 try:
@@ -254,10 +259,11 @@ else:
                 fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
+                # V72 FIX: PENDIKSAN TINGGI GRAFIK
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
-                    height=300,
+                    height=250, # Dikecilkan dari 300px
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
                         tickangle=-45,
