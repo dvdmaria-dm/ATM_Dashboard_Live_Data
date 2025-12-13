@@ -80,7 +80,6 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
-            # 1. Convert ke Datetime dulu untuk sorting aman
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -211,7 +210,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
+        # --- LOGIKA GRAFIK V61 (SHORT DATE FORMAT) ---
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -221,17 +220,15 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
-                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
+                # 1. SORTING (Penting: Sort berdasarkan datetime asli dulu)
                 daily = daily.sort_values('TANGGAL')
                 
-                # 2. KONVERSI KE STRING UNTUK VISUALISASI
-                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
-                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+                # 2. FORMATTING (Menjadi '01 Dec', '02 Dec')
+                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
                 
-                # 3. Plot menggunakan String Column sebagai X
-                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
-                # Jadi tidak akan ada jam yang muncul.
-                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                # 3. PLOTTING
+                # Gunakan TANGGAL_LABEL sebagai sumbu X
+                fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
                 fig.update_layout(
@@ -239,9 +236,10 @@ else:
                     yaxis_title="Volume", 
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
+                    # Paksa Axis jadi KATEGORI agar urut sesuai data kita dan tidak diubah Plotly
                     xaxis=dict(
-                        tickangle=-45,
-                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
+                        type='category', 
+                        tickangle=-45
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
