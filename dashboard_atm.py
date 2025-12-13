@@ -8,12 +8,10 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Perbaikan Padding Judul & Grafik)
+# Styling CSS (Padding judul pas, margin grafik nol)
 st.markdown("""
 <style>
-    /* PERBAIKAN JUDUL: Tambah padding atas agar tidak terpotong */
     .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
-    
     .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
     
@@ -83,7 +81,7 @@ def load_data():
         # --- DATA CLEANING ---
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
-        # Hapus kolom duplikat (PENTING)
+        # Hapus kolom duplikat (Anti-Error Pivot)
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
@@ -96,6 +94,10 @@ def load_data():
 
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
+            
+        # PEMBERSIH BULAN (FIX MASALAH FILTER)
+        if 'BULAN' in df.columns:
+            df['BULAN'] = df['BULAN'].astype(str).str.strip() # Hapus spasi nakal
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -164,15 +166,18 @@ else:
             
     with col_f2:
         if 'BULAN' in df.columns:
-            months = df['BULAN'].dropna().unique().tolist()
+            months = df['BULAN'].unique().tolist() # Sudah dibersihkan strip()
+            # Otomatis pilih bulan terakhir
             sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
             sel_mon = "Semua"
 
-    # APPLY FILTER
+    # APPLY FILTER (PASTIKAN INI JALAN)
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
+    
+    # Filter Bulan (Kunci Masalah)
     if sel_mon != "Semua" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
@@ -195,7 +200,7 @@ else:
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 2. RINCIAN CABANG (HORIZONTAL)
+        # 2. RINCIAN CABANG
         with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
@@ -222,22 +227,17 @@ else:
     with col_right:
         st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
         
-        # 3. TOP 5 UNIT PROBLEM (HORIZONTAL PIVOT)
+        # 3. TOP 5 UNIT PROBLEM
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
                 
-                # Pre-Group aman
+                # Pre-Group untuk pivot aman
                 grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
                 
-                # Pivot
                 pivot_top5 = grouped_df.pivot_table(
-                    index=['TID', 'LOKASI'], 
-                    columns='WEEK', 
-                    values='VAL', 
-                    aggfunc='sum',
-                    fill_value=0
+                    index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0
                 )
                 
                 desired_cols = ['W1', 'W2', 'W3', 'W4']
@@ -247,9 +247,7 @@ else:
                 pivot_top5 = pivot_top5[desired_cols]
                 pivot_top5['TOTAL'] = pivot_top5.sum(axis=1)
                 
-                # Ambil Top 5
                 top5_final = pivot_top5.sort_values('TOTAL', ascending=False).head(5)
-                
                 st.dataframe(top5_final, use_container_width=True)
                 
             except Exception as e:
@@ -260,7 +258,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (PERBAIKAN LABEL TANGGAL)
+        # 4. GRAFIK TREN HARIAN (BENAR-BENAR HARIAN)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -274,17 +272,16 @@ else:
                 fig = px.line(daily, x='TANGGAL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
-                # PERBAIKAN LAYOUT SUMBU X
+                # FORMAT TANGGAL YANG BENAR
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
-                        tickformat="%d %b", # Format ringkas: 01 Dec
-                        tickmode='auto',    # Biarkan Plotly mengatur kerapatan label agar tidak menumpuk
-                        nticks=10,          # Panduan agar tidak terlalu banyak label
-                        showgrid=False
+                        tickformat="%d %b", # Contoh: 01 Dec
+                        dtick="D1",         # Jarak 1 Hari (Agar tidak loncat bulan)
+                        tickangle=-45       # Miringkan sedikit biar tidak tabrakan
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
