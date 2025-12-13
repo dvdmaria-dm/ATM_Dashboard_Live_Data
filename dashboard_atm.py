@@ -80,6 +80,7 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
+            # 1. Convert ke Datetime dulu untuk sorting aman
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -210,7 +211,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (V62 - SORTING FIX)
+        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -220,17 +221,17 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
-                # 1. KOLOM SORTING (PENTING: DATETIME ASLI)
-                daily['SORT_KEY'] = daily['TANGGAL']
+                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
+                daily = daily.sort_values('TANGGAL')
                 
-                # 2. KOLOM LABEL (SINGKAT)
-                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
+                # 2. KONVERSI KE STRING UNTUK VISUALISASI
+                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
+                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
                 
-                # 3. SORTING DATA BERDASARKAN DATETIME ASLI
-                daily = daily.sort_values('SORT_KEY')
-                
-                # Plotly (Gunakan LABEL untuk X, dan berikan array urutan SORT_KEY)
-                fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                # 3. Plot menggunakan String Column sebagai X
+                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
+                # Jadi tidak akan ada jam yang muncul.
+                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
                 fig.update_layout(
@@ -239,11 +240,8 @@ else:
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
-                        type='category', 
                         tickangle=-45,
-                        # Plotly akan mengambil urutan dari dataframe yang sudah di-sort
-                        categoryorder='array',
-                        categoryarray=daily['TANGGAL_LABEL'].tolist()
+                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
