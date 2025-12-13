@@ -11,7 +11,7 @@ st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_
 # Styling CSS (Font Ultra-Compact Global dan Text Center Alignment)
 st.markdown("""
 <style>
-    /* V72 FIX: TAMPILAN LEBIH PENDEK & RATA TENGAH MUTLAK */
+    /* V73 FIX: FONT ULTRA-COMPACT & RATA TENGAH AGRESIV */
     
     /* Font Global Lebih Kecil (12px) */
     html, body, [class*="st-emotion-"] { 
@@ -26,15 +26,23 @@ st.markdown("""
     /* Font Dataframe (Tabel) Ultra-Compact (9px) */
     .dataframe {
         font-size: 9px !important; 
-        text-align: center;
     }
     
-    /* Paksa semua sel di dalam tabel rata tengah */
+    /* TARGET MUTLAK: Paksa semua data sel (td) dan header kolom (th) rata tengah */
+    /* Ini menargetkan semua angka di dalam tabel */
     .dataframe td {
-        text-align: center !important;
+        text-align: center !important; 
+        padding: 5px 4px !important; /* Kurangi padding agar lebih compact */
     }
     
-    /* Khusus Header Baris Pertama (Cabang/TID/Lokasi) Wajib Kiri */
+    /* Target Mutlak: Pastikan Header Kolom (W1, W2, TOTAL, AVG) Rata Tengah */
+    .dataframe th {
+        text-align: center !important;
+        padding: 5px 4px !important;
+    }
+
+    /* Khusus Header BARIS (Nama Cabang/TID/Lokasi) dikembalikan ke RATA KIRI */
+    /* Ini untuk estetika agar nama tidak terlihat aneh */
     .dataframe tbody th {
         text-align: left !important;
     }
@@ -240,7 +248,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
         
-        # 4. GRAFIK TREN HARIAN (V60 - TANGGAL PANJANG YYYY-MM-DD)
+        # 4. GRAFIK TREN HARIAN (V72 - TINGGI 250PX)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -251,7 +259,6 @@ else:
             
             if not daily.empty:
                 
-                # Konversi ke string YYYY-MM-DD (Logika V60)
                 daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
                 
                 daily = daily.sort_values('TANGGAL')
@@ -259,11 +266,10 @@ else:
                 fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
-                # V72 FIX: PENDIKSAN TINGGI GRAFIK
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
-                    height=250, # Dikecilkan dari 300px
+                    height=250, # Dikecilkan
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
                         tickangle=-45,
