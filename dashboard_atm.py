@@ -5,15 +5,18 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN (PERBAIKAN TAMPILAN KE 'CENTERED') ---
-# Kunci: Mengubah layout menjadi 'centered' agar tampilan lebih kecil/rapi
-st.set_page_config(layout='centered', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
+# --- 1. KONFIGURASI HALAMAN (KEMBALI KE WIDE) ---
+# Menggunakan mode 'wide' agar kolom menyebar penuh.
+st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS 
+# Styling CSS (Font Dikecilkan Menjadi 10px)
 st.markdown("""
 <style>
     .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
-    .dataframe {font-size: 13px !important;}
+    
+    /* V69 FIX: FONT DATAFRAME DIKECILKAN */
+    .dataframe {font-size: 10px !important;}
+    
     th {background-color: #262730 !important; color: white !important;}
     thead tr th:first-child {display:none}
     tbody th {display:none}
@@ -22,15 +25,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA (Menggunakan URL yang Benar) ---
-# Menggunakan URL yang diverifikasi dari V60
+# --- 2. KONEKSI DATA ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
 try:
     if "gcp_service_account" not in st.secrets:
         st.error("Secrets not found.")
-        st.stop()
+        sys.exit() # Menggunakan sys.exit() untuk berhenti jika tidak ada kredensial
     
     creds = st.secrets["gcp_service_account"]
     raw_key = creds["private_key"]
@@ -77,7 +79,7 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # CLEANING (LOGIKA V60)
+        # CLEANING (LOGIKA STABIL V60/V67)
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
@@ -94,8 +96,8 @@ def load_data():
             df['WEEK'] = df['BULAN_WEEK']
             
         if 'BULAN' in df.columns:
-            # Menggunakan logika V60 yang ada (hanya strip)
-            df['BULAN'] = df['BULAN'].astype(str).str.strip()
+            # Tetap menggunakan pembersih yang kuat (TRIM dan UPPERCASE)
+            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -158,15 +160,19 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            # Tampilkan dan simpan filter (Logika V60)
-            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
+            # Tampilkan dalam format Title, tapi simpan filter dalam UPPERCASE
+            display_months = [m.title() for m in months]
+            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=len(display_months)-1 if display_months else 0)
+            sel_mon = sel_mon_display.upper()
         else:
-            sel_mon = "Semua"
+            sel_mon = "SEMUA"
 
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
-    if sel_mon != "Semua" and 'BULAN' in df_main.columns:
+    
+    # FILTER BULAN: Menggunakan nilai UPPERCASE (seperti "DECEMBER")
+    if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
