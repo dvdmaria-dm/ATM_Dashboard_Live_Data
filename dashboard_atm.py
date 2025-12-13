@@ -8,25 +8,19 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling: Menghilangkan index dataframe yang mengganggu dan merapikan layout
+# Styling CSS to hide dataframe indices and clean up layout
 st.markdown("""
 <style>
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
     .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
     
-    /* Styling Kartu Top 5 */
-    .top-card {
-        background-color: #1E1E1E; 
-        border-left: 4px solid #FF4B4B;
-        padding: 10px; 
-        margin-bottom: 8px; 
-        border-radius: 4px;
-    }
-    
-    /* Sembunyikan index tabel */
+    /* Sembunyikan index tabel (kolom paling kiri) agar lebih rapi */
     thead tr th:first-child {display:none}
     tbody th {display:none}
+    
+    /* Memastikan tidak ada margin aneh di bawah chart */
+    .js-plotly-plot {margin-bottom: 0px !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,13 +100,11 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame()
 
-# --- 3. LOGIKA TABLE MATRIX & PIVOT ---
+# --- 3. LOGIKA TABLE MATRIX ---
 def build_executive_summary(df_curr, is_complain_mode):
     weeks = ['W1', 'W2', 'W3', 'W4']
-    
     row_ticket = {}
     total_ticket = 0
-    
     for w in weeks:
         df_week = df_curr[df_curr['WEEK'] == w] if 'WEEK' in df_curr.columns else pd.DataFrame()
         if not df_week.empty:
@@ -121,7 +113,6 @@ def build_executive_summary(df_curr, is_complain_mode):
             val = 0
         row_ticket[w] = val
         total_ticket += val
-    
     row_ticket['TOTAL'] = total_ticket
     row_ticket['AVG/WEEK'] = round(total_ticket / 4, 1)
 
@@ -132,12 +123,10 @@ def build_executive_summary(df_curr, is_complain_mode):
         count = len(tids)
         row_tid[w] = count
         total_tid_set.update(tids)
-    
     row_tid['TOTAL'] = len(total_tid_set)
     row_tid['AVG/WEEK'] = round(len(total_tid_set) / 4, 1)
 
     matrix_df = pd.DataFrame([row_ticket, row_tid], index=['Global Ticket (Freq)', 'Global Unique TID'])
-    
     cols_order = ['W1', 'W2', 'W3', 'W4', 'TOTAL', 'AVG/WEEK']
     for c in cols_order:
         if c not in matrix_df.columns: matrix_df[c] = 0
@@ -161,7 +150,6 @@ else:
             sel_cat = st.radio("Pilih Kategori:", cats, index=0, horizontal=True)
         else:
             sel_cat = "Semua"
-            
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].dropna().unique().tolist()
@@ -184,7 +172,7 @@ else:
     col_left, col_right = st.columns(2)
 
     # ---------------------------------------------------------
-    # KOLOM KIRI (MATRIX & PIVOT BREAKDOWN)
+    # KOLOM KIRI
     # ---------------------------------------------------------
     with col_left:
         st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon})")
@@ -202,80 +190,70 @@ else:
         with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
-                    # Menentukan Value yang dihitung
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
-                    agg_func = 'sum' if is_complain_mode else 'count' # Count TID/Rows
-
-                    # MEMBUAT PIVOT TABLE (CABANG x WEEK)
-                    pivot_df = df_main.pivot_table(
-                        index='CABANG', 
-                        columns='WEEK', 
-                        values=val_col, 
-                        aggfunc=agg_func,
-                        fill_value=0
-                    )
+                    agg_func = 'sum' if is_complain_mode else 'count'
                     
-                    # Memastikan urutan kolom W1, W2, W3, W4 ada
+                    # PIVOT CABANG
+                    pivot_cabang = df_main.pivot_table(
+                        index='CABANG', columns='WEEK', values=val_col, aggfunc=agg_func, fill_value=0
+                    )
                     desired_cols = ['W1', 'W2', 'W3', 'W4']
                     for c in desired_cols:
-                        if c not in pivot_df.columns:
-                            pivot_df[c] = 0
+                        if c not in pivot_cabang.columns: pivot_cabang[c] = 0
+                    pivot_cabang = pivot_cabang[desired_cols]
+                    pivot_cabang['TOTAL'] = pivot_cabang.sum(axis=1)
+                    pivot_cabang = pivot_cabang.sort_values('TOTAL', ascending=False)
                     
-                    # Urutkan Kolom
-                    pivot_df = pivot_df[desired_cols]
-                    
-                    # Tambahkan Kolom TOTAL
-                    pivot_df['TOTAL'] = pivot_df.sum(axis=1)
-                    
-                    # Sort berdasarkan Total tertinggi
-                    pivot_df = pivot_df.sort_values('TOTAL', ascending=False)
-                    
-                    # TAMPILKAN (Memanjang ke Kanan!)
-                    st.dataframe(pivot_df, use_container_width=True)
-                    
+                    st.dataframe(pivot_cabang, use_container_width=True)
                 except Exception as e:
-                    st.error(f"Gagal membuat pivot tabel: {e}")
+                    st.error(f"Gagal membuat pivot cabang: {e}")
             else:
                 st.info("Data Cabang/Week tidak lengkap.")
 
     # ---------------------------------------------------------
-    # KOLOM KANAN (TOP 5 & TREND)
+    # KOLOM KANAN
     # ---------------------------------------------------------
     with col_right:
-        # 3. TOP 5 UNIT PROBLEM
+        # 3. TOP 5 UNIT PROBLEM (HORIZONTAL PIVOT - NEW!)
         st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
         
-        if 'TID' in df_main.columns and 'LOKASI' in df_main.columns:
-            metric_field = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
-            
-            if is_complain_mode:
-                # Group by TID, LOKASI, WEEK (Biar tahu di minggu mana kejadian terparah)
-                # Namun untuk Top 5 biasanya kita total sebulan dulu biar adil rankingnya
-                top5 = df_main.groupby(['TID', 'LOKASI'])[metric_field].sum().reset_index()
-                top5 = top5.sort_values(metric_field, ascending=False).head(5)
-            else:
-                top5 = df_main.groupby(['TID', 'LOKASI']).size().reset_index(name='TOTAL_FREQ')
-                top5 = top5.sort_values('TOTAL_FREQ', ascending=False).head(5)
-            
-            if not top5.empty:
-                for idx, row in top5.iterrows():
-                    val = row['JUMLAH_COMPLAIN'] if is_complain_mode else row['TOTAL_FREQ']
-                    
-                    st.markdown(f"""
-                    <div class="top-card">
-                        <div style="display:flex; justify-content:space-between;">
-                            <span style="font-weight:bold; font-size:16px; color:#FFF;">
-                                TID: {row['TID']}
-                            </span>
-                            <span style="color:#FF4B4B; font-weight:bold;">{val}x</span>
-                        </div>
-                        <div style="font-size:12px; color:#AAA; margin-top:4px;">{row['LOKASI']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("Tidak ada data Top 5.")
+        if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
+            try:
+                val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
+                agg_func = 'sum' if is_complain_mode else 'count'
+                
+                # PIVOT TOP 5 (Index: TID & LOKASI, Kolom: WEEK)
+                pivot_top5 = df_main.pivot_table(
+                    index=['TID', 'LOKASI'], 
+                    columns='WEEK', 
+                    values=val_col, 
+                    aggfunc=agg_func, 
+                    fill_value=0
+                )
+                
+                # Ensure W1-W4 columns exist
+                desired_cols = ['W1', 'W2', 'W3', 'W4']
+                for c in desired_cols:
+                    if c not in pivot_top5.columns: pivot_top5[c] = 0
+                
+                # Reorder columns
+                pivot_top5 = pivot_top5[desired_cols]
+                
+                # Calculate TOTAL for ranking
+                pivot_top5['TOTAL'] = pivot_top5.sum(axis=1)
+                
+                # Sort by TOTAL desc and take top 5
+                top5_final = pivot_top5.sort_values('TOTAL', ascending=False).head(5)
+                
+                # Display as dataframe
+                st.dataframe(top5_final, use_container_width=True)
+                
+            except Exception as e:
+                 st.error(f"Gagal membuat Top 5 Pivot: {e}")
+        else:
+            st.info("Data TID/Lokasi/Week tidak lengkap untuk Top 5.")
 
-        # 4. GRAFIK TREN HARIAN
+        # 4. GRAFIK TREN HARIAN (CLEANED UP)
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
@@ -291,14 +269,20 @@ else:
                 daily = daily.sort_values('TANGGAL')
                 fig = px.line(daily, x='TANGGAL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
+                
+                # UPDATE LAYOUT: Ensure clean rendering
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
                     height=300,
-                    margin=dict(l=0, r=0, t=20, b=0),
-                    xaxis=dict(tickformat="%d %b", dtick="D1")
+                    margin=dict(l=0, r=0, t=20, b=5), # Bottom margin tipis
+                    xaxis=dict(
+                        tickformat="%d %b", 
+                        dtick="D1",
+                        tickmode='linear' # Paksa mode linear agar tidak ada label aneh
+                    )
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                # SAYA PASTIKAN TIDAK ADA DATA DUMP DISINI
+                # DIJAMIN BERSIH DI BAWAH SINI
             else:
                 st.info("Data harian kosong.")
