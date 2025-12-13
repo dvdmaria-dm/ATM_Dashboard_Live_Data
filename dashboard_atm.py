@@ -14,12 +14,8 @@ st.markdown("""
     .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
     .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
-    
-    /* Sembunyikan index tabel */
     thead tr th:first-child {display:none}
     tbody th {display:none}
-    
-    /* Hapus margin bawah grafik */
     .js-plotly-plot {margin-bottom: 0px !important;}
     .stPlotlyChart {margin-bottom: 0px !important;}
 </style>
@@ -78,14 +74,14 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # --- DATA CLEANING ---
+        # CLEANING
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
-            # V59 FIX: .dt.normalize() membuang jam/menit/detik (jadi 00:00:00 mutlak)
-            df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce').dt.normalize()
+            # 1. Convert ke Datetime dulu untuk sorting aman
+            df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
              df['JUMLAH_COMPLAIN'] = pd.to_numeric(df['JUMLAH_COMPLAIN'].astype(str).str.replace('-', '0'), errors='coerce').fillna(0).astype(int)
@@ -109,18 +105,14 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame()
 
-# --- 3. LOGIKA MATRIX TABLE ---
+# --- 3. LOGIKA MATRIX ---
 def build_executive_summary(df_curr, is_complain_mode):
     weeks = ['W1', 'W2', 'W3', 'W4']
     row_ticket = {}
     total_ticket = 0
-    
     for w in weeks:
         df_week = df_curr[df_curr['WEEK'] == w] if 'WEEK' in df_curr.columns else pd.DataFrame()
-        if not df_week.empty:
-            val = df_week['JUMLAH_COMPLAIN'].sum() if is_complain_mode else len(df_week)
-        else:
-            val = 0
+        val = df_week['JUMLAH_COMPLAIN'].sum() if is_complain_mode and not df_week.empty else len(df_week) if not df_week.empty else 0
         row_ticket[w] = val
         total_ticket += val
     
@@ -140,10 +132,8 @@ def build_executive_summary(df_curr, is_complain_mode):
 
     matrix_df = pd.DataFrame([row_ticket, row_tid], index=['Global Ticket (Freq)', 'Global Unique TID'])
     cols_order = ['W1', 'W2', 'W3', 'W4', 'TOTAL', 'AVG/WEEK']
-    
     for c in cols_order:
         if c not in matrix_df.columns: matrix_df[c] = 0
-            
     return matrix_df[cols_order]
 
 # --- 4. UI DASHBOARD ---
@@ -154,7 +144,6 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -162,7 +151,6 @@ else:
             sel_cat = st.radio("Pilih Kategori:", cats, index=0, horizontal=True)
         else:
             sel_cat = "Semua"
-            
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
@@ -170,7 +158,6 @@ else:
         else:
             sel_mon = "Semua"
 
-    # APPLY FILTER
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
@@ -178,21 +165,13 @@ else:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
-    
     is_complain_mode = 'Complain' in sel_cat
-
     col_left, col_right = st.columns(2)
 
-    # === KOLOM KIRI ===
     with col_left:
         st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon})")
-        
         matrix_result = build_executive_summary(df_main, is_complain_mode)
-        st.dataframe(
-            matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), 
-            use_container_width=True
-        )
-        
+        st.dataframe(matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
         with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
@@ -200,57 +179,39 @@ else:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                     agg_func = 'sum' if is_complain_mode else 'count'
-                    
-                    pivot_cabang = df_main.pivot_table(
-                        index='CABANG', columns='WEEK', values=val_col, aggfunc=agg_func, fill_value=0
-                    )
-                    
+                    pivot_cabang = df_main.pivot_table(index='CABANG', columns='WEEK', values=val_col, aggfunc=agg_func, fill_value=0)
                     desired_cols = ['W1', 'W2', 'W3', 'W4']
                     for c in desired_cols:
                         if c not in pivot_cabang.columns: pivot_cabang[c] = 0
-                    
                     pivot_cabang = pivot_cabang[desired_cols]
                     pivot_cabang['TOTAL'] = pivot_cabang.sum(axis=1)
                     pivot_cabang = pivot_cabang.sort_values('TOTAL', ascending=False)
-                    
                     st.dataframe(pivot_cabang, use_container_width=True)
                 except Exception as e:
                     st.error(f"Gagal pivot cabang: {e}")
 
-    # === KOLOM KANAN ===
     with col_right:
         st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
-        
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
-                
                 grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
-                
-                pivot_top5 = grouped_df.pivot_table(
-                    index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0
-                )
-                
+                pivot_top5 = grouped_df.pivot_table(index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0)
                 desired_cols = ['W1', 'W2', 'W3', 'W4']
                 for c in desired_cols:
                     if c not in pivot_top5.columns: pivot_top5[c] = 0
-                
                 pivot_top5 = pivot_top5[desired_cols]
                 pivot_top5['TOTAL'] = pivot_top5.sum(axis=1)
-                
                 top5_final = pivot_top5.sort_values('TOTAL', ascending=False).head(5)
                 st.dataframe(top5_final, use_container_width=True)
-                
             except Exception as e:
                  st.error(f"Gagal Top 5: {e}")
-        else:
-            st.info("Data tidak lengkap.")
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (V59 - ANTI TIMESTAMP)
+        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -260,20 +221,27 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
+                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
                 daily = daily.sort_values('TANGGAL')
-                fig = px.line(daily, x='TANGGAL', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                
+                # 2. KONVERSI KE STRING UNTUK VISUALISASI
+                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
+                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+                
+                # 3. Plot menggunakan String Column sebagai X
+                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
+                # Jadi tidak akan ada jam yang muncul.
+                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
-                # LAYOUT AXIS YANG DI PAKSA RAPI
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
-                        tickformat="%d %b", # HANYA Tanggal & Bulan (01 Dec)
-                        dtick="D1",         # Interval 1 Hari
-                        tickangle=-45       # Miring 45 derajat agar tidak tabrakan
+                        tickangle=-45,
+                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
