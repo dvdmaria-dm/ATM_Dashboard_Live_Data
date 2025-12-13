@@ -6,19 +6,30 @@ import gspread
 import sys
 import re
 
-# --- KONFIGURASI KONEKSI V44 (FIXED LIBRARY USAGE) ---
+# --- LOAD DATA (BAGIAN INI WAJIB KAU ISI, BANG!) ---
+# 1. Masukkan Link Google Sheet Asli Milikmu di bawah ini:
+#    Contoh: "https://docs.google.com/spreadsheets/d/1234567890abcdefg/edit"
+SHEET_URL = https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit?gid=98670277#gid=98670277  # <--- GANTI TEKS INI DENGAN LINK ASLIMU
+
+# 2. Masukkan Nama Tab (Sheet) yang ada datanya:
+#    Lihat di bagian bawah Google Sheet-mu.
+#    Berdasarkan screenshotmu, kemungkinannya adalah 'AIMS_Master'
+SHEET_NAME = 'AIMS_Master'  # <--- PASTIKAN INI SAMA PERSIS (Huruf Besar/Kecil Pengaruh!)
+
+# -------------------------------------------------------
+# --- KONFIGURASI KONEKSI V45 (NO EDIT NEEDED HERE) ---
+st.set_page_config(layout='wide', page_title="Dashboard ATM")
+
 try:
     if "gcp_service_account" not in st.secrets:
         st.error("KUNCI 'gcp_service_account' TIDAK DITEMUKAN DI SECRETS.")
         st.stop()
     
     creds = st.secrets["gcp_service_account"]
-
-    # --- FITUR PEMBERSIH KUNCI ---
-    raw_key = creds["private_key"]
-    key_clean = raw_key.strip() 
-    key_clean = key_clean.replace("\\n", "\n")
     
+    # Auto-Cleaning Key
+    raw_key = creds["private_key"]
+    key_clean = raw_key.strip().replace("\\n", "\n")
     if "-----BEGIN PRIVATE KEY-----" in key_clean:
         content = key_clean.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
         content = re.sub(r'\s+', '', content)
@@ -26,7 +37,6 @@ try:
     else:
         final_private_key = key_clean
 
-    # Susun dictionary
     creds_dict = {
         "type": creds["type"],
         "project_id": creds["project_id"],
@@ -41,101 +51,98 @@ try:
         "universe_domain": creds["universe_domain"]
     }
     
-    # KONEKSI BERHASIL DI SINI
     gc = gspread.service_account_from_dict(creds_dict)
 
 except Exception as e:
-    st.error(f"GAGAL KONEKSI. Masalahnya ada di Private Key. Detail Error: {e}")
+    st.error(f"GAGAL KONEKSI SECRETS. Error: {e}")
     sys.exit()
-
-# --- LOAD DATA ---
-st.set_page_config(layout='wide', page_title="Dashboard ATM")
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1G-Fp1l_4p5x6i9W0h-zH3Zl2M_F5q_8g_R8jWbWlG0o/edit?usp=sharing"
-SHEET_NAME = 'data-atm-brilian'
 
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # PERBAIKAN V44:
-        # Kita buka Spreadsheet-nya dulu pakai 'gc' (karena kita punya URL-nya)
-        # Ini metode paling anti-gagal dibanding menebak nama file.
+        # Cek apakah user sudah mengganti URL dummy
+        if "TEMPEL_URL" in SHEET_URL:
+             st.error("⚠️ URL BELUM DIISI! Tolong edit file dashboard_atm.py dan masukkan Link Google Sheet asli Anda di baris 'SHEET_URL'.")
+             return pd.DataFrame()
+
         sh = gc.open_by_url(SHEET_URL)
-        
-        # Lalu kita serahkan objek spreadsheet 'sh' ke gspread_pandas untuk dijadikan DataFrame
-        # HAPUS parameter 'url=' yang bikin error tadi!
         sp = spread.Spread(sh, sheet=SHEET_NAME)
-        
         df = sp.sheet_to_df(index=False)
         
-        # Cleaning Data
-        if 'Tanggal' in df.columns:
-            df['Tanggal'] = pd.to_datetime(df['Tanggal'], errors='coerce')
-        if 'Jumlah Transaksi' in df.columns:
-            df['Jumlah Transaksi'] = pd.to_numeric(df['Jumlah Transaksi'], errors='coerce').fillna(0).astype(int)
+        # Cleaning Data (Sesuaikan nama kolom dengan Excel aslimu!)
+        # Aku lihat di screenshot ada kolom: 'TANGGAL', 'LOKASI', 'JUMLAH_COMPLAIN', dll.
+        # Kita harus sesuaikan agar tidak error kolom tidak ditemukan.
         
-        df = df.dropna(subset=['Tanggal'])
-        return df
+        # Standardisasi nama kolom (ubah ke huruf kecil semua biar aman)
+        df.columns = df.columns.str.strip() # Hapus spasi nama kolom
+        
+        # Mapping kolom (Sesuaikan dengan data aslimu di AIMS_Master)
+        # Ganti 'TANGGAL' jika di excelmu namanya beda
+        col_tanggal = 'TANGGAL' if 'TANGGAL' in df.columns else 'Tanggal'
+        col_jumlah = 'JUMLAH_COMPLAIN' if 'JUMLAH_COMPLAIN' in df.columns else 'Jumlah Transaksi' 
+        col_lokasi = 'LOKASI' if 'LOKASI' in df.columns else 'Lokasi ATM'
+        col_bank = 'CABANG' if 'CABANG' in df.columns else 'Bank' # Asumsi Cabang sebagai grouping
+
+        if col_tanggal in df.columns:
+            df[col_tanggal] = pd.to_datetime(df[col_tanggal], errors='coerce')
+            df = df.dropna(subset=[col_tanggal])
+            
+        if col_jumlah in df.columns:
+            df[col_jumlah] = pd.to_numeric(df[col_jumlah], errors='coerce').fillna(0).astype(int)
+
+        return df, col_tanggal, col_jumlah, col_lokasi, col_bank
+
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"❌ TAB TIDAK DITEMUKAN: '{SHEET_NAME}'. Cek nama tab di bawah Google Sheet Anda (Contoh: AIMS_Master) dan ganti di script.")
+        return pd.DataFrame(), None, None, None, None
     except Exception as e:
-        # Jika error di sini, kemungkinan besar email service account belum di-invite ke GSheet
-        st.error(f"GAGAL MEMBUKA SPREADSHEET. Pastikan email '{creds['client_email']}' sudah dijadikan 'Viewer/Editor' di Google Sheet Anda. Error: {e}")
-        return pd.DataFrame()
+        st.error(f"❌ GAGAL MEMBUKA SPREADSHEET: {e}")
+        return pd.DataFrame(), None, None, None, None
 
 # --- TAMPILAN DASHBOARD ---
-df = load_data()
+data_result = load_data()
+
+# Handle return value (karena fungsi bisa return tuple atau dataframe kosong)
+if isinstance(data_result, tuple):
+    df, tgl_col, jml_col, lok_col, bank_col = data_result
+else:
+    df = data_result
+    tgl_col, jml_col, lok_col, bank_col = None, None, None, None
 
 if df.empty:
-    st.warning("Data kosong atau gagal dimuat.")
+    st.warning("Data belum tersedia. Cek URL dan Nama Tab.")
 else:
-    st.title("💸 Dashboard Kinerja ATM Brilian")
-
+    st.title("💸 Dashboard ATM Monitoring")
+    
+    # Sidebar Filter
     st.sidebar.header("Filter Data")
-    # Cek apakah kolom ada sebelum membuat filter
-    if 'Bank' in df.columns:
-        bank_options = ['Semua Bank'] + sorted(df['Bank'].unique().tolist())
-        selected_bank = st.sidebar.selectbox('Pilih Bank:', bank_options)
+    
+    # Filter Bank/Cabang
+    if bank_col and bank_col in df.columns:
+        bank_opts = ['Semua'] + sorted(df[bank_col].astype(str).unique().tolist())
+        sel_bank = st.sidebar.selectbox(f'Pilih {bank_col}:', bank_opts)
     else:
-        selected_bank = 'Semua Bank'
-        
-    if 'Lokasi ATM' in df.columns:
-        lokasi_options = ['Semua Lokasi'] + sorted(df['Lokasi ATM'].unique().tolist())
-        selected_location = st.sidebar.selectbox('Pilih Lokasi:', lokasi_options)
-    else:
-        selected_location = 'Semua Lokasi'
+        sel_bank = 'Semua'
 
-    if 'Tanggal' in df.columns:
-        min_date = df['Tanggal'].min().date()
-        max_date = df['Tanggal'].max().date()
-        date_input = st.sidebar.date_input("Rentang Tanggal", [min_date, max_date], min_value=min_date, max_value=max_date)
+    # Filter Lokasi
+    if lok_col and lok_col in df.columns:
+        lok_opts = ['Semua'] + sorted(df[lok_col].astype(str).unique().tolist())
+        sel_lok = st.sidebar.selectbox(f'Pilih {lok_col}:', lok_opts)
     else:
-        date_input = []
+        sel_lok = 'Semua'
 
     # Filter Logic
-    filtered_df = df.copy()
-    if selected_bank != 'Semua Bank':
-        filtered_df = filtered_df[filtered_df['Bank'] == selected_bank]
-    if selected_location != 'Semua Lokasi':
-        filtered_df = filtered_df[filtered_df['Lokasi ATM'] == selected_location]
+    fil_df = df.copy()
+    if sel_bank != 'Semua' and bank_col:
+        fil_df = fil_df[fil_df[bank_col].astype(str) == sel_bank]
+    if sel_lok != 'Semua' and lok_col:
+        fil_df = fil_df[fil_df[lok_col].astype(str) == sel_lok]
+
+    # Visualisasi Sederhana
+    st.write(f"Menampilkan {len(fil_df)} data.")
+    st.dataframe(fil_df, use_container_width=True)
     
-    if isinstance(date_input, list) and len(date_input) == 2:
-        start_date, end_date = pd.to_datetime(date_input[0]), pd.to_datetime(date_input[1])
-        filtered_df = filtered_df[(filtered_df['Tanggal'] >= start_date) & (filtered_df['Tanggal'] <= end_date)]
-
-    # Metrics
-    if not filtered_df.empty:
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Transaksi", f"{filtered_df['Jumlah Transaksi'].sum():,}")
-        col2.metric("Rata-rata Transaksi", f"{filtered_df['Jumlah Transaksi'].mean():,.0f}")
-        col3.metric("Total Lokasi", filtered_df['Lokasi ATM'].nunique())
-        
-        st.markdown("---")
-
-        st.subheader("Tren Transaksi Harian")
-        daily_trend = filtered_df.groupby('Tanggal')['Jumlah Transaksi'].sum().reset_index()
-        st.plotly_chart(px.line(daily_trend, x='Tanggal', y='Jumlah Transaksi', template='plotly_dark'), use_container_width=True)
-
-        st.subheader("Distribusi per Bank")
-        bank_dist = filtered_df.groupby('Bank')['Jumlah Transaksi'].sum().reset_index()
-        st.plotly_chart(px.pie(bank_dist, values='Jumlah Transaksi', names='Bank', hole=0.4, template='plotly_dark'), use_container_width=True)
-
-        st.subheader("Detail Data")
-        st.dataframe(filtered_df.sort_values('Tanggal', ascending=False), use_container_width=True)
+    if tgl_col and jml_col and not fil_df.empty:
+        st.subheader("Tren Data")
+        trend = fil_df.groupby(tgl_col)[jml_col].sum().reset_index()
+        st.plotly_chart(px.line(trend, x=tgl_col, y=jml_col), use_container_width=True)
