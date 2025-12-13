@@ -90,9 +90,9 @@ def load_data():
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # PEMBERSIH BULAN AGRESIF (Memperbaiki Filter)
+        # V66 FIX: PEMBERSIH BULAN AGRESIF (Wajib UPPERCASE)
         if 'BULAN' in df.columns:
-            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.title()
+            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -144,6 +144,7 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
+    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -153,16 +154,28 @@ else:
             sel_cat = "Semua"
     with col_f2:
         if 'BULAN' in df.columns:
-            months = df['BULAN'].unique().tolist()
-            # Otomatis pilih bulan terakhir (Index 0 karena data sudah diurutkan string secara default)
-            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
+            # V66 FIX: Variabel months juga di UPPERCASE untuk disamakan dengan data
+            months = df['BULAN'].unique().tolist() 
+            sel_mon_upper = [m.upper().strip() for m in months]
+            
+            # Tampilkan di selectbox dalam format Title (lebih bagus dilihat)
+            display_months = [m.title() for m in months]
+            
+            # Tentukan pilihan bulan saat ini
+            default_index = len(display_months)-1 if display_months else 0
+            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=default_index)
+            
+            # Simpan nilai filter dalam UPPERCASE
+            sel_mon = sel_mon_display.upper()
         else:
-            sel_mon = "Semua"
+            sel_mon = "SEMUA"
 
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
-    if sel_mon != "Semua" and 'BULAN' in df_main.columns:
+    
+    # V66 FIX: Filter Bulan menggunakan UPPERCASE
+    if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
@@ -170,12 +183,12 @@ else:
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon})")
+        st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon.title()})")
         matrix_result = build_executive_summary(df_main, is_complain_mode)
         st.dataframe(matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
+        with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon.title()})"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -192,7 +205,7 @@ else:
                     st.error(f"Gagal pivot cabang: {e}")
 
     with col_right:
-        st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
+        st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon.title()})")
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -210,9 +223,9 @@ else:
                  st.error(f"Gagal Top 5: {e}")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
+        st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
         
-        # 4. GRAFIK TREN HARIAN (V65 - SORTING KRONOLOGIS)
+        # 4. GRAFIK TREN HARIAN (V66 - SAMA SEKALI TIDAK MUNGKIN SALAH URUTAN)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -241,7 +254,6 @@ else:
                     xaxis=dict(
                         type='category', 
                         tickangle=-45,
-                        # Plotly akan mengambil urutan dari TANGGAL_LABEL yang sudah diurutkan.
                         categoryorder='array',
                         categoryarray=daily['TANGGAL_LABEL'].tolist()
                     )
