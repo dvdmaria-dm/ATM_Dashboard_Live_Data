@@ -5,24 +5,19 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN (LAYOUT MEWAH) ---
+# --- 1. KONFIGURASI HALAMAN (LAYOUT WIDE) ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS Khusus agar mirip tampilan "Dark Executive"
+# CSS Custom untuk merapikan margin dan font
 st.markdown("""
 <style>
-    [data-testid="stMetricValue"] {
-        font-size: 24px;
-        color: #4ea8de;
-    }
-    .big-font {
-        font-size:20px !important;
-        font-weight: bold;
-    }
+    .block-container {padding-top: 1rem; padding-bottom: 1rem;}
+    [data-testid="stMetricValue"] {font-size: 20px; color: #4ea8de;}
+    .stExpander {border: 1px solid #444; border-radius: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA (ENGINE V49 - JANGAN DIUBAH LAGI) ---
+# --- 2. KONEKSI DATA (ENGINE V49 - SUDAH STABIL) ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
@@ -75,21 +70,17 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # CLEANING & MAPPING KOLOM
+        # CLEANING
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
 
-        # Pastikan kolom-kolom krusial ada (berdasarkan screenshot Sheetmu)
-        # TANGGAL, KATEGORI, BULAN, WEEK, JUMLAH_COMPLAIN, TID, LOKASI, CABANG
-        
         if 'TANGGAL' in df.columns:
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
-        # Konversi angka
         if 'JUMLAH_COMPLAIN' in df.columns:
              df['JUMLAH_COMPLAIN'] = pd.to_numeric(df['JUMLAH_COMPLAIN'].replace('-', '0'), errors='coerce').fillna(0).astype(int)
         else:
-             df['JUMLAH_COMPLAIN'] = 1 # Fallback jika kolom tidak ada
+             df['JUMLAH_COMPLAIN'] = 1 
              
         return df
 
@@ -97,119 +88,135 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame()
 
-# --- 3. UI DASHBOARD EKSEKUTIF ---
+# --- 3. UI DASHBOARD (LAYOUT LOCALHOST REPLICA) ---
 df = load_data()
 
 if df.empty:
     st.warning("Data belum tersedia. Pastikan koneksi aman.")
 else:
-    # Header Dashboard
-    st.title("🇮🇩 ATM Executive Dashboard")
+    # JUDUL
+    st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # --- BAGIAN FILTER ATAS (Mirip Screenshot Localhost) ---
+    # --- FILTER AREA ---
     col_filter1, col_filter2 = st.columns([2, 1])
     
     with col_filter1:
-        st.subheader("Pilih Kategori:")
-        # Ambil unik kategori dari data (Elastic, Complain, dll)
+        st.caption("Pilih Kategori:")
         if 'KATEGORI' in df.columns:
             kategori_list = sorted(df['KATEGORI'].dropna().unique().tolist())
-            # Radio button horizontal
             pilih_kategori = st.radio("Kategori", kategori_list, index=0, horizontal=True, label_visibility="collapsed")
         else:
             pilih_kategori = "Semua"
-            st.info("Kolom 'KATEGORI' tidak ditemukan di Excel.")
 
     with col_filter2:
-        st.subheader("Pilih Bulan:")
+        st.caption("Pilih Bulan Analisis:")
         if 'BULAN' in df.columns:
             bulan_list = df['BULAN'].dropna().unique().tolist()
-            # Coba urutkan bulan jika formatnya dikenali, kalau tidak alphabet
             pilih_bulan = st.selectbox("Bulan", bulan_list, index=len(bulan_list)-1 if bulan_list else 0, label_visibility="collapsed")
         else:
             pilih_bulan = "Semua"
 
-    # --- FILTERING LOGIC ---
+    # --- FILTERING ---
     df_filtered = df.copy()
-    
-    # Filter 1: Kategori
     if 'KATEGORI' in df.columns and pilih_kategori:
         df_filtered = df_filtered[df_filtered['KATEGORI'] == pilih_kategori]
-        
-    # Filter 2: Bulan
     if 'BULAN' in df.columns and pilih_bulan:
         df_filtered = df_filtered[df_filtered['BULAN'] == pilih_bulan]
 
     st.markdown("---")
 
-    # --- BAGIAN UTAMA (KIRI: TABEL, KANAN: LIST) ---
-    col_main1, col_main2 = st.columns([3, 2])
+    # --- MAIN LAYOUT (50:50 SPLIT) ---
+    col_left, col_right = st.columns(2) # Simetris
 
-    with col_main1:
-        st.subheader(f"🌏 {pilih_kategori} Overview (Month: {pilih_bulan})")
+    # ==========================
+    # KOLOM KIRI (TABLES)
+    # ==========================
+    with col_left:
+        st.subheader(f"🌍 {pilih_kategori} Overview (Month: {pilih_bulan})")
         
-        # Metric Cards Sederhana di atas tabel
+        # Metric Bar Kecil
         m1, m2 = st.columns(2)
         total_ticket = df_filtered['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df.columns else len(df_filtered)
         unique_tid = df_filtered['TID'].nunique() if 'TID' in df.columns else 0
-        
         m1.metric("Global Ticket (Freq)", f"{total_ticket:,}")
         m2.metric("Global Unique TID", f"{unique_tid:,}")
-        
-        # TABEL OVERVIEW PER MINGGU (WEEK)
-        # Kita pivot datanya: Baris = Cabang, Kolom = Week, Isi = Jumlah Complain
-        if 'WEEK' in df_filtered.columns and 'CABANG' in df_filtered.columns:
-            try:
-                # Pivot Table
-                pivot_week = df_filtered.pivot_table(
-                    index='CABANG', 
-                    columns='WEEK', 
-                    values='JUMLAH_COMPLAIN', 
-                    aggfunc='sum', 
-                    fill_value=0
-                )
-                # Tambahkan kolom Total
-                pivot_week['TOTAL'] = pivot_week.sum(axis=1)
-                # Sort berdasarkan Total tertinggi
-                pivot_week = pivot_week.sort_values('TOTAL', ascending=False)
-                
-                st.dataframe(pivot_week, use_container_width=True)
-            except Exception as e:
-                st.info("Data tidak cukup untuk membuat Pivot Table Mingguan.")
-        else:
-            st.info("Kolom 'WEEK' atau 'CABANG' tidak ditemukan untuk membuat tabel overview.")
 
-    with col_main2:
-        st.subheader(f"🔥 Top 5 {pilih_kategori} Unit Problem")
+        # 1. TABEL GLOBAL (PIVOT CABANG)
+        if 'CABANG' in df_filtered.columns:
+            # Grouping sederhana per cabang
+            global_table = df_filtered.groupby('CABANG')['JUMLAH_COMPLAIN'].sum().reset_index()
+            global_table = global_table.rename(columns={'JUMLAH_COMPLAIN': 'TOTAL TIKET'})
+            global_table = global_table.sort_values('TOTAL TIKET', ascending=False)
+            
+            # Tampilkan Tabel Utama
+            st.dataframe(global_table, use_container_width=True, hide_index=True)
+        else:
+            st.info("Kolom CABANG tidak ditemukan.")
+
+        # 2. BREAKDOWN SHOW/HIDE (EXPANDER)
+        st.markdown("<br>", unsafe_allow_html=True) # Spasi
+        with st.expander("📂 Klik untuk Lihat Rincian Data (Raw Data)"):
+            st.write("Detail Data Tiket:")
+            # Tampilkan kolom-kolom penting saja agar rapi
+            cols_to_show = [c for c in ['TANGGAL', 'TID', 'LOKASI', 'JUMLAH_COMPLAIN', 'KETERANGAN'] if c in df_filtered.columns]
+            if cols_to_show:
+                st.dataframe(df_filtered[cols_to_show], use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(df_filtered, use_container_width=True)
+
+    # ==========================
+    # KOLOM KANAN (TOP 5 & CHART)
+    # ==========================
+    with col_right:
+        # 1. TOP 5 PROBLEM
+        st.subheader(f"🔥 Top 5 {pilih_kategori} Unit Problem ({pilih_bulan})")
         
-        # List Top 5 TID/Lokasi bermasalah
         if 'TID' in df_filtered.columns and 'LOKASI' in df_filtered.columns:
+            # Cari Top 5
             top_problem = df_filtered.groupby(['TID', 'LOKASI'])['JUMLAH_COMPLAIN'].sum().reset_index()
             top_problem = top_problem.sort_values('JUMLAH_COMPLAIN', ascending=False).head(5)
             
-            for index, row in top_problem.iterrows():
-                tid = row['TID']
-                loc = row['LOKASI']
-                count = row['JUMLAH_COMPLAIN']
-                # Tampilan Card Custom ala Executive
-                st.markdown(f"""
-                <div style="background-color: #262730; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 5px solid #ff4b4b;">
-                    <b>TID: {tid}</b> | <span style="color:#ff4b4b; font-weight:bold;">{count}x Ticket</span><br>
-                    <small>{loc}</small>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("Kolom TID/LOKASI tidak lengkap.")
+            # Tampilan Custom Card
+            if not top_problem.empty:
+                for index, row in top_problem.iterrows():
+                    tid = row['TID']
+                    loc = row['LOKASI']
+                    count = row['JUMLAH_COMPLAIN']
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #1E1E1E; 
+                        padding: 10px 15px; 
+                        border-radius: 8px; 
+                        margin-bottom: 8px; 
+                        border: 1px solid #333;
+                        display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="color: #FFF; font-weight: bold;">TID: {tid}</span><br>
+                            <span style="color: #AAA; font-size: 12px;">{loc}</span>
+                        </div>
+                        <div style="color: #FF4B4B; font-weight: bold; font-size: 16px;">
+                            {count}x
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Tidak ada data Top 5.")
 
-    # --- BAGIAN BAWAH (CHART) ---
-    st.subheader(f"📈 Tren Harian (Ticket Volume - {pilih_bulan})")
-    
-    if 'TANGGAL' in df_filtered.columns:
-        daily_trend = df_filtered.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
-        if not daily_trend.empty:
-            fig = px.line(daily_trend, x='TANGGAL', y='JUMLAH_COMPLAIN', markers=True, template="plotly_dark")
-            fig.update_traces(line_color='#ff4b4b', line_width=3)
-            fig.update_layout(xaxis_title="Tanggal", yaxis_title="Jumlah Tiket", height=350)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Tidak ada data harian untuk ditampilkan.")
+        # 2. GRAFIK TREN HARIAN (DI BAWAH TOP 5)
+        st.markdown("<br>", unsafe_allow_html=True) # Spasi
+        st.subheader(f"📈 Tren Harian (Ticket Volume - {pilih_bulan})")
+        
+        if 'TANGGAL' in df_filtered.columns:
+            daily_trend = df_filtered.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
+            if not daily_trend.empty:
+                fig = px.line(daily_trend, x='TANGGAL', y='JUMLAH_COMPLAIN', markers=True, template="plotly_dark")
+                fig.update_traces(line_color='#FF4B4B', line_width=3)
+                fig.update_layout(
+                    xaxis_title="Tanggal", 
+                    yaxis_title="Jumlah Tiket",
+                    height=300, # Tinggi disesuaikan agar pas di kanan
+                    margin=dict(l=20, r=20, t=30, b=20)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Data harian tidak tersedia.")
