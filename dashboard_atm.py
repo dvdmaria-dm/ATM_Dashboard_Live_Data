@@ -1,27 +1,48 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import gspread
 from gspread_pandas import spread
-import json
+import gspread
 import sys
 
-# --- KONFIGURASI KONEKSI (V35 - METODE JSON STRING) ---
+# --- KONFIGURASI KONEKSI V41 (FINAL MATCHING) ---
 try:
-    # Kita mengambil satu blok teks penuh yang berisi seluruh credential
-    # Ini jauh lebih aman daripada memecah variable satu per satu
-    json_text = st.secrets["google_credentials"]["file_content"]
+    # KITA PAKAI LOGIKA SEDERHANA:
+    # Kita cari kunci bernama "gcp_service_account" di Secrets.
+    # Jika error sebelumnya bilang "no key google_credentials", itu karena script lama.
+    # Script ini PASTI mencari "gcp_service_account".
     
-    # Python akan mengubah teks string menjadi Dictionary (JSON Object)
-    # Ini otomatis menangani format \n dan karakter spesial
-    creds_dict = json.loads(json_text)
+    if "gcp_service_account" not in st.secrets:
+        st.error("KUNCI 'gcp_service_account' TIDAK DITEMUKAN DI SECRETS. Mohon cek ejaan header di Secrets.")
+        st.stop()
+    
+    # Ambil data dari secrets
+    creds = st.secrets["gcp_service_account"]
 
-    # Gunakan dictionary hasil parsing untuk koneksi
+    # SIASAT KHUSUS PRIVATE KEY:
+    # Mengembalikan karakter \n yang mungkin rusak saat copy-paste
+    private_key_fixed = creds["private_key"].replace("\\n", "\n")
+
+    # Susun ulang dictionary agar dimengerti Google
+    creds_dict = {
+        "type": creds["type"],
+        "project_id": creds["project_id"],
+        "private_key_id": creds["private_key_id"],
+        "private_key": private_key_fixed,
+        "client_email": creds["client_email"],
+        "client_id": creds["client_id"],
+        "auth_uri": creds["auth_uri"],
+        "token_uri": creds["token_uri"],
+        "auth_provider_x509_cert_url": creds["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": creds["client_x509_cert_url"],
+        "universe_domain": creds["universe_domain"]
+    }
+    
+    # Buka koneksi
     gc = gspread.service_account_from_dict(creds_dict)
 
 except Exception as e:
-    st.error(f"GAGAL KONEKSI KE GOOGLE SHEETS. Cek Secrets. Error Detail: {e}")
-    # Stop eksekusi agar tidak muncul error beruntun
+    st.error(f"GAGAL KONEKSI. Detail Error: {e}")
     sys.exit()
 
 # --- LOAD DATA ---
@@ -44,7 +65,7 @@ def load_data():
         df = df.dropna(subset=['Tanggal'])
         return df
     except Exception as e:
-        st.error(f"Gagal memuat data dari Sheet. Pastikan Sheet dishare ke client_email. Error: {e}")
+        st.error(f"Gagal memuat data dari Google Sheet. Error: {e}")
         return pd.DataFrame()
 
 # --- TAMPILAN DASHBOARD ---
@@ -55,23 +76,19 @@ if df.empty:
 else:
     st.title("💸 Dashboard Kinerja ATM Brilian")
 
-    # --- SIDEBAR FILTER ---
+    # Sidebar
     st.sidebar.header("Filter Data")
-    
-    # Filter Bank
     bank_options = ['Semua Bank'] + sorted(df['Bank'].unique().tolist())
     selected_bank = st.sidebar.selectbox('Pilih Bank:', bank_options)
     
-    # Filter Lokasi
     lokasi_options = ['Semua Lokasi'] + sorted(df['Lokasi ATM'].unique().tolist())
     selected_location = st.sidebar.selectbox('Pilih Lokasi:', lokasi_options)
 
-    # Filter Tanggal
     min_date = df['Tanggal'].min().date()
     max_date = df['Tanggal'].max().date()
     date_input = st.sidebar.date_input("Rentang Tanggal", [min_date, max_date], min_value=min_date, max_value=max_date)
 
-    # Logika Filter
+    # Filter Logic
     filtered_df = df.copy()
     if selected_bank != 'Semua Bank':
         filtered_df = filtered_df[filtered_df['Bank'] == selected_bank]
@@ -82,34 +99,23 @@ else:
         start_date, end_date = pd.to_datetime(date_input[0]), pd.to_datetime(date_input[1])
         filtered_df = filtered_df[(filtered_df['Tanggal'] >= start_date) & (filtered_df['Tanggal'] <= end_date)]
 
-    # --- VISUALISASI UTAMA ---
-    
-    # Metrics
+    # Visualisasi
     col1, col2, col3 = st.columns(3)
-    total_trx = filtered_df['Jumlah Transaksi'].sum()
-    avg_trx = filtered_df['Jumlah Transaksi'].mean() if not filtered_df.empty else 0
-    total_loc = filtered_df['Lokasi ATM'].nunique()
-    
-    col1.metric("Total Transaksi", f"{total_trx:,}")
-    col2.metric("Rata-rata Transaksi", f"{avg_trx:,.0f}")
-    col3.metric("Total Lokasi", total_loc)
+    col1.metric("Total Transaksi", f"{filtered_df['Jumlah Transaksi'].sum():,}")
+    col2.metric("Rata-rata Transaksi", f"{filtered_df['Jumlah Transaksi'].mean():,.0f}")
+    col3.metric("Total Lokasi", filtered_df['Lokasi ATM'].nunique())
     
     st.markdown("---")
 
-    # Chart 1: Line Chart Tren
     st.subheader("Tren Transaksi Harian")
     daily_trend = filtered_df.groupby('Tanggal')['Jumlah Transaksi'].sum().reset_index()
     if not daily_trend.empty:
-        fig_line = px.line(daily_trend, x='Tanggal', y='Jumlah Transaksi', template='plotly_dark')
-        st.plotly_chart(fig_line, use_container_width=True)
+        st.plotly_chart(px.line(daily_trend, x='Tanggal', y='Jumlah Transaksi', template='plotly_dark'), use_container_width=True)
 
-    # Chart 2: Pie Chart Bank
     st.subheader("Distribusi per Bank")
     bank_dist = filtered_df.groupby('Bank')['Jumlah Transaksi'].sum().reset_index()
     if not bank_dist.empty:
-        fig_pie = px.pie(bank_dist, values='Jumlah Transaksi', names='Bank', hole=0.4, template='plotly_dark')
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    # Tabel Data
+        st.plotly_chart(px.pie(bank_dist, values='Jumlah Transaksi', names='Bank', hole=0.4, template='plotly_dark'), use_container_width=True)
+
     st.subheader("Detail Data")
     st.dataframe(filtered_df.sort_values('Tanggal', ascending=False), use_container_width=True)
