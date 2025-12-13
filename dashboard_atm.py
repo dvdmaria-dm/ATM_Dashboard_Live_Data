@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. KONEKSI DATA ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ0u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
 try:
@@ -90,7 +90,7 @@ def load_data():
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # V66 FIX: PEMBERSIH BULAN AGRESIF (Wajib UPPERCASE)
+        # V67 FIX: Pastikan Kolom BULAN bersih total (TRIM dan UPPERCASE)
         if 'BULAN' in df.columns:
             df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
             
@@ -154,18 +154,10 @@ else:
             sel_cat = "Semua"
     with col_f2:
         if 'BULAN' in df.columns:
-            # V66 FIX: Variabel months juga di UPPERCASE untuk disamakan dengan data
-            months = df['BULAN'].unique().tolist() 
-            sel_mon_upper = [m.upper().strip() for m in months]
-            
-            # Tampilkan di selectbox dalam format Title (lebih bagus dilihat)
+            months = df['BULAN'].unique().tolist()
+            # Tampilkan dalam format Title/Kapital Awal saja, tapi simpan filter dalam UPPERCASE
             display_months = [m.title() for m in months]
-            
-            # Tentukan pilihan bulan saat ini
-            default_index = len(display_months)-1 if display_months else 0
-            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=default_index)
-            
-            # Simpan nilai filter dalam UPPERCASE
+            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=len(display_months)-1 if display_months else 0)
             sel_mon = sel_mon_display.upper()
         else:
             sel_mon = "SEMUA"
@@ -174,7 +166,7 @@ else:
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
     
-    # V66 FIX: Filter Bulan menggunakan UPPERCASE
+    # FILTER BULAN V67: Menggunakan nilai UPPERCASE (misal: "DECEMBER")
     if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
@@ -225,7 +217,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
         
-        # 4. GRAFIK TREN HARIAN (V66 - SAMA SEKALI TIDAK MUNGKIN SALAH URUTAN)
+        # 4. GRAFIK TREN HARIAN (REVERT KE V60 - TANGGAL PANJANG YYYY-MM-DD)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -236,13 +228,12 @@ else:
             
             if not daily.empty:
                 
-                # 1. KOLOM LABEL (SINGKAT: '01 Dec')
-                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
+                # V67: Konversi ke string agar timestamp tidak bocor (mirip V60)
+                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
                 
-                # 2. SORTING KRONOLOGIS (WAJIB)
                 daily = daily.sort_values('TANGGAL')
                 
-                # 3. PLOTTING
+                # Plotting menggunakan String Label
                 fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
@@ -252,8 +243,8 @@ else:
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
-                        type='category', 
                         tickangle=-45,
+                        type='category', # Paksa sumbu X menjadi kategori agar label string tampil
                         categoryorder='array',
                         categoryarray=daily['TANGGAL_LABEL'].tolist()
                     )
