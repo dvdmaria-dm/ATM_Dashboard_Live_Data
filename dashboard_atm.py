@@ -8,10 +8,12 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Menghilangkan padding index tabel & margin chart)
+# Styling CSS (Perbaikan Padding Judul & Grafik)
 st.markdown("""
 <style>
-    .block-container {padding-top: 1rem; padding-bottom: 3rem;}
+    /* PERBAIKAN JUDUL: Tambah padding atas agar tidak terpotong */
+    .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
+    
     .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
     
@@ -19,7 +21,7 @@ st.markdown("""
     thead tr th:first-child {display:none}
     tbody th {display:none}
     
-    /* Hapus margin bawah grafik agar tidak ada ruang putih */
+    /* Hapus margin bawah grafik */
     .js-plotly-plot {margin-bottom: 0px !important;}
     .stPlotlyChart {margin-bottom: 0px !important;}
 </style>
@@ -78,18 +80,12 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # --- DATA CLEANING V56 (CRUCIAL FIX) ---
-        # 1. Hapus kolom tanpa nama
+        # --- DATA CLEANING ---
         df = df.loc[:, df.columns != '']
-        
-        # 2. Standarisasi Nama Kolom
         df.columns = df.columns.str.strip().str.upper()
-        
-        # 3. HAPUS KOLOM DUPLIKAT (Penyebab Error "Not 1-Dimensional")
-        # Jika ada 2 kolom bernama 'TID', kita ambil yang pertama saja.
+        # Hapus kolom duplikat (PENTING)
         df = df.loc[:, ~df.columns.duplicated()]
 
-        # 4. Konversi Tipe Data
         if 'TANGGAL' in df.columns:
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
@@ -98,11 +94,9 @@ def load_data():
         else:
              df['JUMLAH_COMPLAIN'] = 0
 
-        # 5. Normalisasi Kolom WEEK
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # 6. Pastikan TID & LOKASI jadi String (Biar aman saat grouping)
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
         if 'LOKASI' in df.columns:
@@ -228,22 +222,21 @@ else:
     with col_right:
         st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
         
-        # 3. TOP 5 UNIT PROBLEM (FIXED ERROR 1-DIMENSIONAL)
+        # 3. TOP 5 UNIT PROBLEM (HORIZONTAL PIVOT)
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
                 
-                # Pre-Group untuk memastikan index unik sebelum Pivot
-                # Ini langkah kunci untuk menghindari error "Grouper not 1-dimensional"
+                # Pre-Group aman
                 grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
                 
-                # Baru di-pivot dari data yang sudah bersih
+                # Pivot
                 pivot_top5 = grouped_df.pivot_table(
                     index=['TID', 'LOKASI'], 
                     columns='WEEK', 
                     values='VAL', 
-                    aggfunc='sum', # Sum lagi karena sudah di-agg sebelumnya
+                    aggfunc='sum',
                     fill_value=0
                 )
                 
@@ -267,7 +260,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (CLEAN)
+        # 4. GRAFIK TREN HARIAN (PERBAIKAN LABEL TANGGAL)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -280,12 +273,19 @@ else:
                 daily = daily.sort_values('TANGGAL')
                 fig = px.line(daily, x='TANGGAL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
+                
+                # PERBAIKAN LAYOUT SUMBU X
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
-                    xaxis=dict(tickformat="%d %b", dtick="D1")
+                    xaxis=dict(
+                        tickformat="%d %b", # Format ringkas: 01 Dec
+                        tickmode='auto',    # Biarkan Plotly mengatur kerapatan label agar tidak menumpuk
+                        nticks=10,          # Panduan agar tidak terlalu banyak label
+                        showgrid=False
+                    )
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
