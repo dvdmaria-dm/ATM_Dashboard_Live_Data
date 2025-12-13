@@ -8,7 +8,7 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Padding judul pas, margin grafik nol)
+# Styling CSS 
 st.markdown("""
 <style>
     .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
@@ -80,6 +80,7 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
+            # 1. Convert ke Datetime dulu untuk sorting aman
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -90,9 +91,8 @@ def load_data():
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # V64 FIX: PEMBERSIH BULAN (Hanya TRIM dan jadi Title)
         if 'BULAN' in df.columns:
-            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.title()
+            df['BULAN'] = df['BULAN'].astype(str).str.strip()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -144,7 +144,6 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -155,12 +154,10 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            # Urutan bulan berdasarkan abjad, tapi harusnya data sudah bersih
             sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
             sel_mon = "Semua"
 
-    # APPLY FILTER (INI HARUS BERHASIL)
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
@@ -214,7 +211,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (V64 - SORTING & LABEL MUTLAK)
+        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -224,15 +221,17 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
-                
-                # 1. KOLOM LABEL (SINGKAT: '01 Dec')
-                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
-                
-                # 2. SORTING KRONOLOGIS (WAJIB)
+                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
                 daily = daily.sort_values('TANGGAL')
                 
-                # 3. PLOTTING
-                fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                # 2. KONVERSI KE STRING UNTUK VISUALISASI
+                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
+                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+                
+                # 3. Plot menggunakan String Column sebagai X
+                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
+                # Jadi tidak akan ada jam yang muncul.
+                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
                 fig.update_layout(
@@ -241,12 +240,11 @@ else:
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
-                        type='category', 
                         tickangle=-45,
-                        categoryorder='array',
-                        categoryarray=daily['TANGGAL_LABEL'].tolist()
+                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("Data harian kosong untuk bulan ini.")
+                st.info("Data harian kosong.")
+
