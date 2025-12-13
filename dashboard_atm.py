@@ -210,7 +210,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # --- LOGIKA GRAFIK V61 (SHORT DATE FORMAT) ---
+        # 4. GRAFIK TREN HARIAN (V62 - SORTING FIX)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -220,14 +220,16 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
-                # 1. SORTING (Penting: Sort berdasarkan datetime asli dulu)
-                daily = daily.sort_values('TANGGAL')
+                # 1. KOLOM SORTING (PENTING: DATETIME ASLI)
+                daily['SORT_KEY'] = daily['TANGGAL']
                 
-                # 2. FORMATTING (Menjadi '01 Dec', '02 Dec')
+                # 2. KOLOM LABEL (SINGKAT)
                 daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%d %b')
                 
-                # 3. PLOTTING
-                # Gunakan TANGGAL_LABEL sebagai sumbu X
+                # 3. SORTING DATA BERDASARKAN DATETIME ASLI
+                daily = daily.sort_values('SORT_KEY')
+                
+                # Plotly (Gunakan LABEL untuk X, dan berikan array urutan SORT_KEY)
                 fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
@@ -236,10 +238,12 @@ else:
                     yaxis_title="Volume", 
                     height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
-                    # Paksa Axis jadi KATEGORI agar urut sesuai data kita dan tidak diubah Plotly
                     xaxis=dict(
                         type='category', 
-                        tickangle=-45
+                        tickangle=-45,
+                        # Plotly akan mengambil urutan dari dataframe yang sudah di-sort
+                        categoryorder='array',
+                        categoryarray=daily['TANGGAL_LABEL'].tolist()
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
