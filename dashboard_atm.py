@@ -6,15 +6,22 @@ import sys
 import re
 
 # --- 1. KONFIGURASI HALAMAN (KEMBALI KE WIDE) ---
-# Menggunakan mode 'wide' agar kolom menyebar penuh.
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Font Dikecilkan Menjadi 10px)
+# Styling CSS (Font Dikecilkan Secara Global dan untuk Tabel)
 st.markdown("""
 <style>
-    .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
+    /* V70 FIX: MENGECILKAN FONT GLOBAL UNTUK SEMUA ELEMEN */
+    html, body, [class*="st-emotion-"] { 
+        font-size: 14px; /* Default lebih kecil dari 16px bawaan Streamlit */
+    }
+    h1, h2, h3, h4, h5, h6 { 
+        font-size: 1.2em !important; /* Mengecilkan ukuran header */
+    }
+
+    .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
     
-    /* V69 FIX: FONT DATAFRAME DIKECILKAN */
+    /* Font Dataframe (Tabel) Dikecilkan */
     .dataframe {font-size: 10px !important;}
     
     th {background-color: #262730 !important; color: white !important;}
@@ -32,7 +39,7 @@ SHEET_NAME = 'AIMS_Master'
 try:
     if "gcp_service_account" not in st.secrets:
         st.error("Secrets not found.")
-        sys.exit() # Menggunakan sys.exit() untuk berhenti jika tidak ada kredensial
+        sys.exit() 
     
     creds = st.secrets["gcp_service_account"]
     raw_key = creds["private_key"]
@@ -62,7 +69,6 @@ try:
     gc = gspread.service_account_from_dict(creds_dict)
 
 except Exception as e:
-    # Error koneksi (404) akan tertangkap di sini
     st.error(f"Connection Error: {e}")
     sys.exit()
 
@@ -79,7 +85,7 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # CLEANING (LOGIKA STABIL V60/V67)
+        # CLEANING (LOGIKA STABIL)
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
@@ -160,7 +166,6 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            # Tampilkan dalam format Title, tapi simpan filter dalam UPPERCASE
             display_months = [m.title() for m in months]
             sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=len(display_months)-1 if display_months else 0)
             sel_mon = sel_mon_display.upper()
