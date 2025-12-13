@@ -5,8 +5,9 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
+# --- 1. KONFIGURASI HALAMAN (PERBAIKAN TAMPILAN KE 'CENTERED') ---
+# Kunci: Mengubah layout menjadi 'centered' agar tampilan lebih kecil/rapi
+st.set_page_config(layout='centered', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
 # Styling CSS 
 st.markdown("""
@@ -21,8 +22,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ0u2pmrqQc340/edit"
+# --- 2. KONEKSI DATA (Menggunakan URL yang Benar) ---
+# Menggunakan URL yang diverifikasi dari V60
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
 try:
@@ -58,6 +60,7 @@ try:
     gc = gspread.service_account_from_dict(creds_dict)
 
 except Exception as e:
+    # Error koneksi (404) akan tertangkap di sini
     st.error(f"Connection Error: {e}")
     sys.exit()
 
@@ -74,7 +77,7 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # CLEANING
+        # CLEANING (LOGIKA V60)
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
@@ -90,9 +93,9 @@ def load_data():
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
             df['WEEK'] = df['BULAN_WEEK']
             
-        # V67 FIX: Pastikan Kolom BULAN bersih total (TRIM dan UPPERCASE)
         if 'BULAN' in df.columns:
-            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
+            # Menggunakan logika V60 yang ada (hanya strip)
+            df['BULAN'] = df['BULAN'].astype(str).str.strip()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -155,19 +158,15 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            # Tampilkan dalam format Title/Kapital Awal saja, tapi simpan filter dalam UPPERCASE
-            display_months = [m.title() for m in months]
-            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=len(display_months)-1 if display_months else 0)
-            sel_mon = sel_mon_display.upper()
+            # Tampilkan dan simpan filter (Logika V60)
+            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
-            sel_mon = "SEMUA"
+            sel_mon = "Semua"
 
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
-    
-    # FILTER BULAN V67: Menggunakan nilai UPPERCASE (misal: "DECEMBER")
-    if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
+    if sel_mon != "Semua" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
@@ -217,7 +216,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
         
-        # 4. GRAFIK TREN HARIAN (REVERT KE V60 - TANGGAL PANJANG YYYY-MM-DD)
+        # 4. GRAFIK TREN HARIAN (V60 - TANGGAL PANJANG YYYY-MM-DD)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -228,12 +227,11 @@ else:
             
             if not daily.empty:
                 
-                # V67: Konversi ke string agar timestamp tidak bocor (mirip V60)
+                # Konversi ke string YYYY-MM-DD (Logika V60)
                 daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
                 
                 daily = daily.sort_values('TANGGAL')
                 
-                # Plotting menggunakan String Label
                 fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
@@ -244,7 +242,7 @@ else:
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
                         tickangle=-45,
-                        type='category', # Paksa sumbu X menjadi kategori agar label string tampil
+                        type='category', 
                         categoryorder='array',
                         categoryarray=daily['TANGGAL_LABEL'].tolist()
                     )
