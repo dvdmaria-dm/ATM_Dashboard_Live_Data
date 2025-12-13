@@ -39,7 +39,17 @@ def load_data_gsheets(gsheet_url):
     
     # 1. KONEKSI KE GOOGLE DRIVE MENGGUNAKAN SERVICE ACCOUNT JSON
     try:
-        gc = gspread.service_account(filename="credentials.json")
+      import json
+import streamlit as st
+from gspread_pandas import spread
+
+# Ambil data Secrets dari Streamlit Cloud, bukan dari file lokal.
+# Kunci gspread_service_account adalah nama header TOML yang kita masukkan.
+secrets = st.secrets["gspread_service_account"]
+secrets_dict = dict(secrets)
+
+# Gunakan data secrets yang sudah di-load sebagai dict
+gc = gspread.service_account_from_dict(secrets_dict
     except Exception as e:
         st.error(f"⚠️ GAGAL KONEKSI GOOGLE API. Pastikan file 'credentials.json' ada di folder DASHBOARD_ATM. Error: {e}")
         return pd.DataFrame(), pd.DataFrame() 
@@ -380,4 +390,5 @@ with col_right:
         
         st.plotly_chart(fig_line, use_container_width=True)
     else:
+
         st.info(f"Tidak ada data {selected_kategori} di bulan {selected_month_name}.")
