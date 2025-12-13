@@ -5,19 +5,15 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN (EKSEKUTIF DARK MODE) ---
+# --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# CSS untuk memiripkan tampilan dengan Screenshot (Card Hitam & Teks)
+# CSS Styling
 st.markdown("""
 <style>
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
-    
-    /* Styling Tabel Matrix agar mirip screenshot */
-    .dataframe {font-size: 14px !important;}
+    .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
-    
-    /* Styling Card Top 5 */
     .top-card {
         background-color: #1E1E1E; 
         border-left: 4px solid #FF4B4B;
@@ -28,7 +24,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KONEKSI DATA (ENGINE V49 - STABIL) ---
+# --- 2. KONEKSI DATA (V49 ENGINE) ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
@@ -88,15 +84,16 @@ def load_data():
         if 'TANGGAL' in df.columns:
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
+        # LOGIKA KHUSUS KOLOM COMPLAIN
         if 'JUMLAH_COMPLAIN' in df.columns:
-             df['JUMLAH_COMPLAIN'] = pd.to_numeric(df['JUMLAH_COMPLAIN'].replace('-', '0'), errors='coerce').fillna(0).astype(int)
+             # Bersihkan karakter aneh, ganti '-' jadi 0
+             df['JUMLAH_COMPLAIN'] = pd.to_numeric(df['JUMLAH_COMPLAIN'].astype(str).str.replace('-', '0'), errors='coerce').fillna(0).astype(int)
         else:
-             df['JUMLAH_COMPLAIN'] = 1 
-             
-        # Pastikan kolom WEEK/BULAN_WEEK ada (sesuai screenshot kolom S)
-        # Kita normalisasi nama kolom minggu
+             df['JUMLAH_COMPLAIN'] = 0
+
+        # Normalisasi Kolom WEEK
         if 'WEEK' not in df.columns and 'BULAN_WEEK' in df.columns:
-            df['WEEK'] = df['BULAN_WEEK'] # Rename logic
+            df['WEEK'] = df['BULAN_WEEK']
             
         return df
 
@@ -104,30 +101,43 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame()
 
-# --- 3. LOGIKA BUILD TABLE MATRIX ---
-def build_executive_summary(df_curr):
+# --- 3. LOGIKA MATRIX EXECUTIVE (V53 - FIXED LOGIC) ---
+def build_executive_summary(df_curr, kategori_pilih):
     """
-    Fungsi ini membangun tabel W1, W2, W3, W4 persis seperti screenshot.
-    Baris 1: Global Ticket (Sum Jumlah Complain)
-    Baris 2: Global Unique TID (Count Unique TID)
+    Membangun tabel W1, W2, W3, W4.
+    LOGIKA PERBAIKAN:
+    - Jika 'Complain': SUM kolom JUMLAH_COMPLAIN
+    - Jika Lainnya: COUNT Baris (TID)
     """
-    # Siapkan Kolom Mingguan
     weeks = ['W1', 'W2', 'W3', 'W4']
+    
+    # Tentukan Mode Hitung
+    is_complain_mode = 'Complain' in kategori_pilih
     
     # 1. Hitung Baris "Global Ticket (Freq)"
     row_ticket = {}
     total_ticket = 0
+    
     for w in weeks:
-        # Filter data minggu ini
-        val = df_curr[df_curr['WEEK'] == w]['JUMLAH_COMPLAIN'].sum() if 'WEEK' in df_curr.columns else 0
+        df_week = df_curr[df_curr['WEEK'] == w] if 'WEEK' in df_curr.columns else pd.DataFrame()
+        
+        if not df_week.empty:
+            if is_complain_mode:
+                # Jika Complain -> SUM
+                val = df_week['JUMLAH_COMPLAIN'].sum()
+            else:
+                # Jika Lainnya -> COUNT BARIS
+                val = len(df_week)
+        else:
+            val = 0
+            
         row_ticket[w] = val
         total_ticket += val
     
-    # Tambah kolom Total & Avg
     row_ticket['TOTAL'] = total_ticket
     row_ticket['AVG/WEEK'] = round(total_ticket / 4, 1)
 
-    # 2. Hitung Baris "Global Unique TID"
+    # 2. Hitung Baris "Global Unique TID" (Sama untuk semua kategori)
     row_tid = {}
     total_tid_set = set()
     for w in weeks:
@@ -139,12 +149,9 @@ def build_executive_summary(df_curr):
     row_tid['TOTAL'] = len(total_tid_set)
     row_tid['AVG/WEEK'] = round(len(total_tid_set) / 4, 1)
 
-    # Buat DataFrame Matrix
     matrix_df = pd.DataFrame([row_ticket, row_tid], index=['Global Ticket (Freq)', 'Global Unique TID'])
     
-    # Reorder kolom biar rapi
     cols_order = ['W1', 'W2', 'W3', 'W4', 'TOTAL', 'AVG/WEEK']
-    # Pastikan kolom ada (jika data minggu kosong, isi 0)
     for c in cols_order:
         if c not in matrix_df.columns: matrix_df[c] = 0
             
@@ -159,26 +166,21 @@ else:
     # JUDUL
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER AREA
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
-        # Filter Kategori (Radio Horizontal)
         if 'KATEGORI' in df.columns:
             cats = sorted(df['KATEGORI'].dropna().unique().tolist())
             sel_cat = st.radio("Pilih Kategori:", cats, index=0, horizontal=True)
         else:
             sel_cat = "Semua"
-            
     with col_f2:
-        # Filter Bulan
         if 'BULAN' in df.columns:
             months = df['BULAN'].dropna().unique().tolist()
-            # Default pilih bulan terakhir
             sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
             sel_mon = "Semua"
 
-    # TERAPKAN FILTER
+    # FILTER UTAMA
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
@@ -186,34 +188,45 @@ else:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
+    
+    # CEK MODE HITUNG
+    is_complain_mode = 'Complain' in sel_cat
 
     # === LAYOUT UTAMA (50:50) ===
     col_left, col_right = st.columns(2)
 
     # ---------------------------------------------------------
-    # KOLOM KIRI (THE MATRIX TABLE & BREAKDOWN)
+    # KOLOM KIRI (MATRIX & BREAKDOWN)
     # ---------------------------------------------------------
     with col_left:
         st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon})")
         
-        # 1. MATRIX TABLE (PERSIS SCREENSHOT)
-        matrix_result = build_executive_summary(df_main)
-        # Tampilkan tabel dengan highlight max value
+        # 1. MATRIX TABLE (LOGIKA BARU)
+        matrix_result = build_executive_summary(df_main, sel_cat)
         st.dataframe(
-            matrix_result.style.highlight_max(axis=1, color='#262730'), 
+            matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), 
             use_container_width=True
         )
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 2. BREAKDOWN CABANG (EXPANDER)
-        # Kita buat seperti screenshot: "Klik untuk Lihat Rincian Per Cabang"
+        # 2. BREAKDOWN CABANG (Show Week)
         with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
             if 'CABANG' in df_main.columns:
-                # Pivot per Cabang
-                cabang_pivot = df_main.groupby('CABANG')['JUMLAH_COMPLAIN'].sum().reset_index()
-                cabang_pivot = cabang_pivot.sort_values('JUMLAH_COMPLAIN', ascending=False)
-                cabang_pivot.columns = ['CABANG', 'TOTAL TIKET']
+                # Logika Agregasi Cabang
+                if is_complain_mode:
+                    # Sum Jumlah Complain
+                    agg_col = 'JUMLAH_COMPLAIN'
+                else:
+                    # Count Baris (Kita buat kolom dummy hitung)
+                    df_main['COUNT_TEMP'] = 1
+                    agg_col = 'COUNT_TEMP'
+                
+                # Kita group by Cabang dan Week agar week muncul
+                cabang_pivot = df_main.groupby(['CABANG', 'WEEK'])[agg_col].sum().reset_index()
+                cabang_pivot = cabang_pivot.sort_values(agg_col, ascending=False)
+                cabang_pivot.columns = ['CABANG', 'WEEK', 'TOTAL TIKET']
+                
                 st.dataframe(cabang_pivot, use_container_width=True, hide_index=True)
             else:
                 st.info("Data Cabang tidak tersedia.")
@@ -222,21 +235,32 @@ else:
     # KOLOM KANAN (TOP 5 & TREND)
     # ---------------------------------------------------------
     with col_right:
-        # 3. TOP 5 UNIT PROBLEM
+        # 3. TOP 5 UNIT PROBLEM (Show Week)
         st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
         
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns:
-            top5 = df_main.groupby(['TID', 'LOKASI'])['JUMLAH_COMPLAIN'].sum().reset_index()
-            top5 = top5.sort_values('JUMLAH_COMPLAIN', ascending=False).head(5)
+            # Tentukan kolom nilai
+            metric_field = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID' # Kalau count TID, nanti di-count
+            
+            if is_complain_mode:
+                top5 = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[metric_field].sum().reset_index()
+                top5 = top5.sort_values(metric_field, ascending=False).head(5)
+                val_col = metric_field
+            else:
+                # Count Mode
+                top5 = df_main.groupby(['TID', 'LOKASI', 'WEEK']).size().reset_index(name='TOTAL_FREQ')
+                top5 = top5.sort_values('TOTAL_FREQ', ascending=False).head(5)
+                val_col = 'TOTAL_FREQ'
             
             if not top5.empty:
                 for idx, row in top5.iterrows():
-                    # Layout Card Custom
                     st.markdown(f"""
                     <div class="top-card">
                         <div style="display:flex; justify-content:space-between;">
-                            <span style="font-weight:bold; font-size:16px; color:#FFF;">TID: {row['TID']}</span>
-                            <span style="color:#FF4B4B; font-weight:bold;">{row['JUMLAH_COMPLAIN']}x</span>
+                            <span style="font-weight:bold; font-size:16px; color:#FFF;">
+                                TID: {row['TID']} <span style="font-size:12px; color:#AAA; margin-left:5px;">({row['WEEK']})</span>
+                            </span>
+                            <span style="color:#FF4B4B; font-weight:bold;">{row[val_col]}x</span>
                         </div>
                         <div style="font-size:12px; color:#AAA; margin-top:4px;">{row['LOKASI']}</div>
                     </div>
@@ -244,20 +268,39 @@ else:
             else:
                 st.info("Tidak ada data Top 5.")
 
-        # 4. GRAFIK TREN HARIAN (DI BAWAH TOP 5)
+        # 4. GRAFIK TREN HARIAN (Per Tanggal + Label Angka)
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
         if 'TANGGAL' in df_main.columns:
-            daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
+            # Group by Tanggal
+            if is_complain_mode:
+                daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
+                y_val = 'JUMLAH_COMPLAIN'
+            else:
+                daily = df_main.groupby('TANGGAL').size().reset_index(name='TOTAL_FREQ')
+                y_val = 'TOTAL_FREQ'
+            
             if not daily.empty:
-                fig = px.line(daily, x='TANGGAL', y='JUMLAH_COMPLAIN', markers=True, template="plotly_dark")
-                fig.update_traces(line_color='#FF4B4B', line_width=3)
+                # Pastikan urut tanggal
+                daily = daily.sort_values('TANGGAL')
+                
+                fig = px.line(daily, x='TANGGAL', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                fig.update_traces(
+                    line_color='#FF4B4B', 
+                    line_width=3,
+                    textposition="top center" # Munculkan angka di atas titik
+                )
                 fig.update_layout(
                     xaxis_title=None, 
-                    yaxis_title="Tiket", 
-                    height=250,
-                    margin=dict(l=0, r=0, t=10, b=0)
+                    yaxis_title="Volume", 
+                    height=300,
+                    margin=dict(l=0, r=0, t=20, b=0),
+                    # FORMAT TANGGAL HARIAN
+                    xaxis=dict(
+                        tickformat="%d %b", # Format: 01 Dec
+                        dtick="D1" # Paksa interval harian (1 Hari)
+                    )
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
