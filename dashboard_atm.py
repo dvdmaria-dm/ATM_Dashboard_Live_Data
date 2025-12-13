@@ -4,31 +4,44 @@ import plotly.express as px
 from gspread_pandas import spread
 import gspread
 import sys
+import re # Kita butuh ini untuk pembersihan total
 
-# --- KONFIGURASI KONEKSI V41 (FINAL MATCHING) ---
+# --- KONFIGURASI KONEKSI V43 (AUTO-CLEANING) ---
 try:
-    # KITA PAKAI LOGIKA SEDERHANA:
-    # Kita cari kunci bernama "gcp_service_account" di Secrets.
-    # Jika error sebelumnya bilang "no key google_credentials", itu karena script lama.
-    # Script ini PASTI mencari "gcp_service_account".
-    
     if "gcp_service_account" not in st.secrets:
-        st.error("KUNCI 'gcp_service_account' TIDAK DITEMUKAN DI SECRETS. Mohon cek ejaan header di Secrets.")
+        st.error("KUNCI 'gcp_service_account' TIDAK DITEMUKAN DI SECRETS.")
         st.stop()
     
-    # Ambil data dari secrets
     creds = st.secrets["gcp_service_account"]
 
-    # SIASAT KHUSUS PRIVATE KEY:
-    # Mengembalikan karakter \n yang mungkin rusak saat copy-paste
-    private_key_fixed = creds["private_key"].replace("\\n", "\n")
+    # --- FITUR PEMBERSIH KUNCI (THE CLEANER) ---
+    raw_key = creds["private_key"]
+    
+    # 1. Hapus semua spasi dan tab yang tidak sengaja terbawa
+    key_clean = raw_key.strip() 
+    
+    # 2. Koreksi karakter \n yang sering rusak
+    # Jika ada double slash \\n, ubah jadi \n
+    key_clean = key_clean.replace("\\n", "\n")
+    
+    # 3. Trik Paling Jitu: Jika kunci masih dianggap error, kita bangun ulang
+    # Kadang copy paste membuat header terpisah spasi. Kita rapihkan paksa.
+    if "-----BEGIN PRIVATE KEY-----" in key_clean:
+        # Ambil isinya saja
+        content = key_clean.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+        # Buang semua spasi/enter di dalam konten
+        content = re.sub(r'\s+', '', content)
+        # Susun ulang dengan header yang sempurna
+        final_private_key = f"-----BEGIN PRIVATE KEY-----\n{content}\n-----END PRIVATE KEY-----"
+    else:
+        final_private_key = key_clean
 
-    # Susun ulang dictionary agar dimengerti Google
+    # Susun dictionary
     creds_dict = {
         "type": creds["type"],
         "project_id": creds["project_id"],
         "private_key_id": creds["private_key_id"],
-        "private_key": private_key_fixed,
+        "private_key": final_private_key, # Pakai kunci yang sudah dicuci bersih
         "client_email": creds["client_email"],
         "client_id": creds["client_id"],
         "auth_uri": creds["auth_uri"],
@@ -38,11 +51,10 @@ try:
         "universe_domain": creds["universe_domain"]
     }
     
-    # Buka koneksi
     gc = gspread.service_account_from_dict(creds_dict)
 
 except Exception as e:
-    st.error(f"GAGAL KONEKSI. Detail Error: {e}")
+    st.error(f"GAGAL KONEKSI. Masalahnya ada di Private Key. Detail Error: {e}")
     sys.exit()
 
 # --- LOAD DATA ---
@@ -65,7 +77,7 @@ def load_data():
         df = df.dropna(subset=['Tanggal'])
         return df
     except Exception as e:
-        st.error(f"Gagal memuat data dari Google Sheet. Error: {e}")
+        st.error(f"Gagal memuat data. Error: {e}")
         return pd.DataFrame()
 
 # --- TAMPILAN DASHBOARD ---
@@ -76,7 +88,6 @@ if df.empty:
 else:
     st.title("💸 Dashboard Kinerja ATM Brilian")
 
-    # Sidebar
     st.sidebar.header("Filter Data")
     bank_options = ['Semua Bank'] + sorted(df['Bank'].unique().tolist())
     selected_bank = st.sidebar.selectbox('Pilih Bank:', bank_options)
@@ -88,7 +99,6 @@ else:
     max_date = df['Tanggal'].max().date()
     date_input = st.sidebar.date_input("Rentang Tanggal", [min_date, max_date], min_value=min_date, max_value=max_date)
 
-    # Filter Logic
     filtered_df = df.copy()
     if selected_bank != 'Semua Bank':
         filtered_df = filtered_df[filtered_df['Bank'] == selected_bank]
@@ -99,7 +109,6 @@ else:
         start_date, end_date = pd.to_datetime(date_input[0]), pd.to_datetime(date_input[1])
         filtered_df = filtered_df[(filtered_df['Tanggal'] >= start_date) & (filtered_df['Tanggal'] <= end_date)]
 
-    # Visualisasi
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Transaksi", f"{filtered_df['Jumlah Transaksi'].sum():,}")
     col2.metric("Rata-rata Transaksi", f"{filtered_df['Jumlah Transaksi'].mean():,.0f}")
