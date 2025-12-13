@@ -5,24 +5,34 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN (KEMBALI KE WIDE) ---
+# --- 1. KONFIGURASI HALAMAN (WIDE) ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Font Dikecilkan Secara Global dan untuk Tabel)
+# Styling CSS (Font Ultra-Compact Global dan Text Center Alignment)
 st.markdown("""
 <style>
-    /* V70 FIX: MENGECILKAN FONT GLOBAL UNTUK SEMUA ELEMEN */
+    /* V71 FIX: MENGECILKAN FONT GLOBAL & RATA TENGAH TABEL */
+    
+    /* Font Global Lebih Kecil (12px) */
     html, body, [class*="st-emotion-"] { 
-        font-size: 14px; /* Default lebih kecil dari 16px bawaan Streamlit */
+        font-size: 12px; 
     }
     h1, h2, h3, h4, h5, h6 { 
-        font-size: 1.2em !important; /* Mengecilkan ukuran header */
+        font-size: 1.1em !important; /* Header dikecilkan */
     }
 
     .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
     
-    /* Font Dataframe (Tabel) Dikecilkan */
-    .dataframe {font-size: 10px !important;}
+    /* Font Dataframe (Tabel) Ultra-Compact (9px) */
+    .dataframe {
+        font-size: 9px !important; 
+        text-align: center; /* Rata tengah untuk tabel */
+    }
+    
+    /* Paksa semua sel di dalam tabel rata tengah */
+    .dataframe td, .dataframe th {
+        text-align: center !important;
+    }
     
     th {background-color: #262730 !important; color: white !important;}
     thead tr th:first-child {display:none}
@@ -102,7 +112,6 @@ def load_data():
             df['WEEK'] = df['BULAN_WEEK']
             
         if 'BULAN' in df.columns:
-            # Tetap menggunakan pembersih yang kuat (TRIM dan UPPERCASE)
             df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
             
         if 'TID' in df.columns:
@@ -176,7 +185,6 @@ else:
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
     
-    # FILTER BULAN: Menggunakan nilai UPPERCASE (seperti "DECEMBER")
     if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
