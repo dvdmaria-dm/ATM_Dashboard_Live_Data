@@ -10,10 +10,10 @@ from datetime import datetime
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Performance Monitoring", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "Monitoring Hub" Theme - V92)
+# Styling CSS (The "Monitoring Hub" Theme - V93 Alarm)
 st.markdown("""
 <style>
-    /* 1. LAYOUTING EKSTREM (SANGAT RAPAT) */
+    /* 1. LAYOUTING */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -21,7 +21,7 @@ st.markdown("""
         padding-right: 1.5rem !important;
     }
     
-    /* TYPOGRAPHY JUDUL UTAMA (H1) */
+    /* TYPOGRAPHY */
     h1 { 
         font-size: 2.2rem !important; 
         font-weight: 800 !important; 
@@ -31,7 +31,6 @@ st.markdown("""
         letter-spacing: 1px;
     }
     h2 { font-size: 1.1rem !important; margin-bottom: 0px !important;}
-    h3 { font-size: 0.9rem !important; margin-bottom: 2px !important; margin-top: 2px !important;}
     
     html, body, [class*="st-emotion-"] { 
         font-size: 10px; 
@@ -40,7 +39,7 @@ st.markdown("""
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* --- 2. TABLE ALIGNMENT (DATA RIGHT) --- */
+    /* --- 2. TABLE ALIGNMENT --- */
     [data-testid="stDataFrame"] td {
         text-align: right !important;
         padding-top: 2px !important;
@@ -51,7 +50,7 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* --- 3. DESAIN TOMBOL KATEGORI (ELEGANT) --- */
+    /* --- 3. TOMBOL KATEGORI --- */
     div[role="radiogroup"] > label {
         font-size: 12px !important;
         font-weight: bold !important;
@@ -68,20 +67,33 @@ st.markdown("""
         transform: translateY(-1px);
     }
     
-    /* --- 4. DESAIN CARD --- */
+    /* --- 4. ANIMASI KEDAP KEDIP (BLINKING) --- */
+    @keyframes blink-animation {
+      0% { opacity: 1; box-shadow: 0 0 5px #ff0000; transform: scale(1); }
+      50% { opacity: 0.8; box-shadow: 0 0 20px #ff0000; transform: scale(1.02); }
+      100% { opacity: 1; box-shadow: 0 0 5px #ff0000; transform: scale(1); }
+    }
+    .blinking-alert {
+        animation: blink-animation 1.5s infinite;
+        background-color: #FF4B4B;
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 10px;
+        border: 2px solid #ff9999;
+    }
+
+    /* --- 5. DESAIN CARD --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
         border-radius: 8px; 
         padding: 5px; 
         background-color: #1a1a1a; 
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
     }
-    [data-testid="stDataFrame"]:hover, .stPlotlyChart:hover {
-        border-color: #555;
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
-    }
-
     .streamlit-expanderHeader {
         font-size: 11px !important;
         font-weight: bold !important;
@@ -225,7 +237,6 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
-        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -233,7 +244,6 @@ def style_elegant(df_to_style, col_prev, col_total):
         return styles
 
     styler = df_to_style.style.apply(highlight_trend, axis=1)
-    
     styler = styler.set_properties(**{
         'text-align': 'right', 
         'vertical-align': 'middle', 
@@ -286,12 +296,10 @@ df, df_slm = load_data()
 if df.empty:
     st.warning("Data Master belum tersedia.")
 else:
-    # --- HEADER SECTION (SPLIT COLUMNS) ---
+    # HEADER
     c_title, c_clock = st.columns([3, 1]) 
-    
     with c_title:
         st.markdown("<h1>ATM Performance Monitoring</h1>", unsafe_allow_html=True)
-        
     with c_clock:
         components.html(
             """
@@ -300,17 +308,10 @@ else:
             <head>
             <style>
                 body { 
-                    margin: 0; padding: 0; 
-                    background-color: transparent; 
-                    color: #BBBBBB; 
-                    font-family: 'Source Sans Pro', sans-serif; 
-                    text-align: right; 
-                    font-size: 13px; 
-                    font-weight: 600;
-                    display: flex;
-                    justify-content: flex-end;
-                    align-items: center;
-                    height: 100vh;
+                    margin: 0; padding: 0; background-color: transparent; color: #BBBBBB; 
+                    font-family: 'Source Sans Pro', sans-serif; text-align: right; 
+                    font-size: 13px; font-weight: 600; display: flex; 
+                    justify-content: flex-end; align-items: center; height: 100vh;
                 }
             </style>
             </head>
@@ -319,17 +320,7 @@ else:
                 <script>
                 function updateTime() {
                     var now = new Date();
-                    var options = { 
-                        timeZone: 'Asia/Jakarta', 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric', 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        second: '2-digit',
-                        hour12: false
-                    };
+                    var options = { timeZone: 'Asia/Jakarta', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
                     var formatter = new Intl.DateTimeFormat('id-ID', options);
                     var timeString = formatter.format(now);
                     timeString = timeString.replace("pukul ", "") + " WIB";
@@ -340,13 +331,10 @@ else:
                 </script>
             </body>
             </html>
-            """,
-            height=40
+            """, height=40
         )
     
-    # -------------------------------------------------------------------------
-    # LOGIC UTAMA: HITUNG BADGE WARNA
-    # -------------------------------------------------------------------------
+    # FILTER
     all_months = df['BULAN'].unique().tolist() if 'BULAN' in df.columns else []
     default_ix = len(all_months)-1 if all_months else 0
     
@@ -355,7 +343,6 @@ else:
         sel_mon = st.selectbox("Bulan:", all_months, index=default_ix, label_visibility="collapsed")
 
     prev_mon_full_calc = get_prev_month_full(sel_mon)
-    
     df_mon_curr = df[df['BULAN'] == sel_mon] if 'BULAN' in df.columns else df
     df_mon_prev = df[df['BULAN'] == prev_mon_full_calc] if (prev_mon_full_calc and 'BULAN' in df.columns) else pd.DataFrame()
     
@@ -409,12 +396,8 @@ else:
         cat_map[label] = c
         
         rule = f"""
-            div[role="radiogroup"] > label:nth-of-type({idx+1}) {{
-                color: {text_color} !important;
-            }}
-            div[role="radiogroup"] > label:nth-of-type({idx+1}) p {{
-                color: {text_color} !important;
-            }}
+            div[role="radiogroup"] > label:nth-of-type({idx+1}) {{ color: {text_color} !important; }}
+            div[role="radiogroup"] > label:nth-of-type({idx+1}) p {{ color: {text_color} !important; }}
         """
         dynamic_css.append(rule)
 
@@ -424,7 +407,7 @@ else:
         sel_cat_label = st.radio("Kategori:", cat_labels, index=0, horizontal=True, label_visibility="collapsed")
         sel_cat = cat_map[sel_cat_label]
 
-    # DATA FILTERING 
+    # DATA PROCESSING
     df_cat = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
         df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
@@ -443,7 +426,7 @@ else:
     col_total_head = f"Σ {curr_mon_short.upper()}"
     is_complain_mode = 'Complain' in sel_cat
     
-    # 1. GRAFIK TREN (SUPER SLIM)
+    # 1. GRAFIK TREN
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     if 'TANGGAL' in df_main.columns:
         if is_complain_mode:
@@ -460,26 +443,16 @@ else:
             
             fig = px.area(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
             fig.update_traces(
-                line_color='#FF4B4B', 
-                line_width=3,
-                line_shape='spline',
-                textposition="top center",
-                fill='tozeroy', 
-                fillcolor='rgba(255, 75, 75, 0.1)'
+                line_color='#FF4B4B', line_width=3, line_shape='spline', textposition="top center",
+                fill='tozeroy', fillcolor='rgba(255, 75, 75, 0.1)'
             )
             fig.add_hline(
-                y=avg_val, 
-                line_dash="dash", 
-                line_color="rgba(255, 255, 255, 0.5)", 
-                annotation_text=f"AVG: {avg_val:.1f}", 
-                annotation_position="bottom right"
+                y=avg_val, line_dash="dash", line_color="rgba(255, 255, 255, 0.5)", 
+                annotation_text=f"AVG: {avg_val:.1f}", annotation_position="bottom right"
             )
             fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                xaxis_title=None, 
-                yaxis_title=None, 
-                height=170, 
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                xaxis_title=None, yaxis_title=None, height=170, 
                 margin=dict(l=10, r=10, t=10, b=10), 
                 xaxis=dict(tickangle=0, type='category', showgrid=False),
                 yaxis=dict(showgrid=True, gridcolor='#333')
@@ -488,9 +461,8 @@ else:
         else:
             st.info("Data harian kosong.")
 
-    # 2. DETAIL & SLM LOG
+    # 2. DETAIL
     col_left, col_right = st.columns(2)
-
     with col_left:
         st.markdown(f"**🌏 {sel_cat} Overview**")
         matrix_result, c_p, c_t = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
@@ -515,7 +487,6 @@ else:
                     final_cabang[col_total_head] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
                     final_cols = [col_prev_head] + desired_cols + [col_total_head]
                     final_cabang = final_cabang[final_cols].sort_values(col_total_head, ascending=False)
-                    
                     st.dataframe(style_elegant(final_cabang, col_prev_head, col_total_head), use_container_width=True)
                 except Exception as e:
                     st.error(f"Error pivot: {e}")
@@ -523,7 +494,7 @@ else:
     with col_right:
         c_head1, c_head2 = st.columns([2, 1])
         with c_head1:
-             st.markdown(f"**🔥 Top 10 Problem Unit (Diagnosis)**") # Judul Updated
+             st.markdown(f"**🔥 Top 10 Problem Unit (Diagnosis)**")
         with c_head2:
              sort_options = [col_total_head, 'W1', 'W2', 'W3', 'W4']
              sort_by = st.selectbox("Urutkan:", sort_options, index=0, label_visibility="collapsed")
@@ -549,8 +520,7 @@ else:
                 final_cols_top = [col_prev_head] + desired_cols + [col_total_head]
                 final_top5 = final_top5[final_cols_top]
                 
-                # --- TOP 10 LOGIC (UPDATED V92) ---
-                top5_final = final_top5.sort_values(sort_by, ascending=False).head(10) # Change to 10
+                top5_final = final_top5.sort_values(sort_by, ascending=False).head(10)
                 
                 if sort_by in ['W1', 'W2', 'W3', 'W4']:
                     top5_final = top5_final[top5_final[sort_by] > 0]
@@ -560,20 +530,32 @@ else:
                 else:
                     today_dt = pd.Timestamp.now()
                     
+                    # LOGIKA KATEGORI PENYAKIT (LAGGING VS REALTIME)
+                    is_realtime_cat = sel_cat in ['DF Repeat', 'OUT Flm', 'Cash Out']
+                    
                     for idx, row in top5_final.iterrows():
                         tid_val = idx[0]
                         lokasi_val = idx[1]
                         total_val = int(row[col_total_head])
                         curr_mon_code = curr_mon_short.upper()
                         
-                        # --- HITUNG RECENCY (DIAGNOSIS) ---
-                        # Cari tanggal terakhir kejadian di data asli untuk TID ini
+                        # --- HITUNG RECENCY & DIAGNOSIS BAHAYA ---
+                        is_sick = False
+                        time_str = "⏱️ ?"
+                        
                         try:
                             mask_tid = df_main['TID'] == str(tid_val)
                             if mask_tid.any():
                                 last_date = df_main[mask_tid]['TANGGAL'].max()
                                 if pd.notna(last_date):
                                     days_diff = (today_dt - last_date).days
+                                    
+                                    # LOGIKA PENYAKIT (ALARM)
+                                    if is_realtime_cat:
+                                        if days_diff == 0: is_sick = True # Hari ini
+                                    else: # Elastic/Complain (H+1)
+                                        if days_diff <= 1: is_sick = True # Kemarin atau Hari ini
+                                    
                                     if days_diff == 0:
                                         time_str = "⏱️ Hari ini"
                                     elif days_diff == 1:
@@ -590,10 +572,19 @@ else:
                         prev_val_row = row[col_prev_head]
                         trend_emoji = "🔴" if total_val > prev_val_row else "🟢" if total_val < prev_val_row else "⚪"
                         
-                        # LABEL BARU
-                        label = f"{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {time_str} | {lokasi_val}"
+                        # MODIFIKASI LABEL JIKA SAKIT
+                        alert_prefix = "🚨 " if is_sick else ""
+                        label = f"{alert_prefix}{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {time_str} | {lokasi_val}"
                         
                         with st.expander(label):
+                            # ANIMASI KEDAP KEDIP JIKA SAKIT
+                            if is_sick:
+                                st.markdown(f"""
+                                <div class="blinking-alert">
+                                    ⚡ UNIT INI SAKIT PARAH (DATA TERBARU) - PERLU FOLLOW UP SEGERA! ⚡
+                                </div>
+                                """, unsafe_allow_html=True)
+
                             cols_detail = st.columns(5)
                             cols_detail[0].caption(f"{col_prev_head}: {int(prev_val_row)}")
                             cols_detail[1].caption(f"W1: {int(row['W1'])}")
