@@ -5,40 +5,14 @@ import gspread
 import sys
 import re
 
-# --- 1. KONFIGURASI HALAMAN (WIDE) ---
+# --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Font Ultra-Compact Global dan Text Center Alignment)
+# Styling CSS 
 st.markdown("""
 <style>
-    /* V72 FIX: TAMPILAN LEBIH PENDEK & RATA TENGAH MUTLAK */
-    
-    /* Font Global Lebih Kecil (12px) */
-    html, body, [class*="st-emotion-"] { 
-        font-size: 12px; 
-    }
-    h1, h2, h3, h4, h5, h6 { 
-        font-size: 1.1em !important; 
-    }
-
-    .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
-    
-    /* Font Dataframe (Tabel) Ultra-Compact (9px) */
-    .dataframe {
-        font-size: 9px !important; 
-        text-align: center;
-    }
-    
-    /* Paksa semua sel di dalam tabel rata tengah */
-    .dataframe td {
-        text-align: center !important;
-    }
-    
-    /* Khusus Header Baris Pertama (Cabang/TID/Lokasi) Wajib Kiri */
-    .dataframe tbody th {
-        text-align: left !important;
-    }
-    
+    .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
+    .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
     thead tr th:first-child {display:none}
     tbody th {display:none}
@@ -48,13 +22,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. KONEKSI DATA ---
-SHEET_URL = "https://docs.google.com/sheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_NAME = 'AIMS_Master'
 
 try:
     if "gcp_service_account" not in st.secrets:
         st.error("Secrets not found.")
-        sys.exit() 
+        st.stop()
     
     creds = st.secrets["gcp_service_account"]
     raw_key = creds["private_key"]
@@ -100,12 +74,13 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # CLEANING (LOGIKA STABIL)
+        # CLEANING
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
+            # 1. Convert ke Datetime dulu untuk sorting aman
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -117,7 +92,7 @@ def load_data():
             df['WEEK'] = df['BULAN_WEEK']
             
         if 'BULAN' in df.columns:
-            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.upper()
+            df['BULAN'] = df['BULAN'].astype(str).str.strip()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -169,7 +144,6 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -180,17 +154,14 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
-            display_months = [m.title() for m in months]
-            sel_mon_display = st.selectbox("Pilih Bulan Analisis:", display_months, index=len(display_months)-1 if display_months else 0)
-            sel_mon = sel_mon_display.upper()
+            sel_mon = st.selectbox("Pilih Bulan Analisis:", months, index=len(months)-1 if months else 0)
         else:
-            sel_mon = "SEMUA"
+            sel_mon = "Semua"
 
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
-    
-    if sel_mon != "SEMUA" and 'BULAN' in df_main.columns:
+    if sel_mon != "Semua" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
 
     st.markdown("---")
@@ -198,12 +169,12 @@ else:
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon.title()})")
+        st.subheader(f"🌏 {sel_cat} Overview (Month: {sel_mon})")
         matrix_result = build_executive_summary(df_main, is_complain_mode)
         st.dataframe(matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon.title()})"):
+        with st.expander(f"📂 Klik untuk Lihat Rincian Per Cabang ({sel_mon})"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -220,7 +191,7 @@ else:
                     st.error(f"Gagal pivot cabang: {e}")
 
     with col_right:
-        st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon.title()})")
+        st.subheader(f"🔥 Top 5 {sel_cat} Unit Problem ({sel_mon})")
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -238,9 +209,9 @@ else:
                  st.error(f"Gagal Top 5: {e}")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
+        st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
         
-        # 4. GRAFIK TREN HARIAN (V60 - TANGGAL PANJANG YYYY-MM-DD)
+        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
@@ -250,28 +221,30 @@ else:
                 y_val = 'TOTAL_FREQ'
             
             if not daily.empty:
-                
-                # Konversi ke string YYYY-MM-DD (Logika V60)
-                daily['TANGGAL_LABEL'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
-                
+                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
                 daily = daily.sort_values('TANGGAL')
                 
-                fig = px.line(daily, x='TANGGAL_LABEL', y=y_val, markers=True, text=y_val, template="plotly_dark")
+                # 2. KONVERSI KE STRING UNTUK VISUALISASI
+                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
+                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+                
+                # 3. Plot menggunakan String Column sebagai X
+                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
+                # Jadi tidak akan ada jam yang muncul.
+                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
                 fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
                 
-                # V72 FIX: PENDIKSAN TINGGI GRAFIK
                 fig.update_layout(
                     xaxis_title=None, 
                     yaxis_title="Volume", 
-                    height=250, # Dikecilkan dari 300px
+                    height=300,
                     margin=dict(l=0, r=0, t=20, b=10),
                     xaxis=dict(
                         tickangle=-45,
-                        type='category', 
-                        categoryorder='array',
-                        categoryarray=daily['TANGGAL_LABEL'].tolist()
+                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
                     )
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("Data harian kosong untuk bulan ini.")
+                st.info("Data harian kosong.")
+
