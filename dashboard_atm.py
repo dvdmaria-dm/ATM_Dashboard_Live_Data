@@ -8,12 +8,12 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "One-Screen" Theme - V88)
+# Styling CSS (The "One-Screen" Theme - V89)
 st.markdown("""
 <style>
     /* 1. LAYOUTING EKSTREM (SANGAT RAPAT AGAR FIT 1 LAYAR) */
     .block-container {
-        padding-top: 0.5rem !important; /* Mepet atas */
+        padding-top: 0.5rem !important;
         padding-bottom: 1rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
@@ -25,13 +25,13 @@ st.markdown("""
     h3 { font-size: 0.9rem !important; margin-bottom: 2px !important; margin-top: 2px !important;}
     
     html, body, [class*="st-emotion-"] { 
-        font-size: 10px; /* Font global dikecilkan 1px biar muat */
+        font-size: 10px; 
     }
 
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* --- 2. TABLE ALIGNMENT --- */
+    /* --- 2. TABLE ALIGNMENT (DATA RIGHT) --- */
     [data-testid="stDataFrame"] td {
         text-align: right !important;
         padding-top: 2px !important;
@@ -43,29 +43,27 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* --- 3. DESAIN TOMBOL KATEGORI "INTELLIGENT" --- */
+    /* --- 3. BASE DESAIN TOMBOL KATEGORI --- */
     div[role="radiogroup"] > label {
-        font-size: 12px !important; /* Font tombol disesuaikan */
+        font-size: 12px !important;
         font-weight: bold !important;
         background-color: #1E1E1E;
-        padding: 5px 10px; 
-        border-radius: 6px;
-        border: 1px solid #444;
+        padding: 6px 12px; 
+        border-radius: 8px;
+        border: 1px solid #444; /* Default Border */
         margin-right: 4px;
         transition: all 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     div[role="radiogroup"] > label:hover {
-        border-color: #FF4B4B;
-        box-shadow: 0 4px 8px rgba(255, 75, 75, 0.3);
         transform: translateY(-1px);
     }
-
-    /* --- 4. DESAIN "ALIVE" (CARD STYLE) --- */
+    
+    /* --- 4. DESAIN "ALIVE" CARD --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
         border-radius: 8px; 
-        padding: 5px; /* Padding card dikurangi */
+        padding: 5px; 
         background-color: #1a1a1a; 
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         transition: all 0.3s ease;
@@ -231,9 +229,8 @@ def style_elegant(df_to_style, col_prev, col_total):
     styler = styler.set_properties(**{
         'text-align': 'right', 
         'vertical-align': 'middle', 
-        'font-size': '10px' # Font Tabel diperkecil sedikit
+        'font-size': '10px'
     })
-    
     styler = styler.set_table_styles([
         {'selector': 'th', 'props': [('background-color', '#262730'), ('color', 'white'), ('font-size', '10px')]},
     ])
@@ -284,20 +281,17 @@ else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
     # -------------------------------------------------------------------------
-    # LOGIC: HITUNG BADGE TOMBOL DENGAN PERBANDINGAN BULAN LALU (REQ NO. 2)
+    # LOGIC UTAMA: HITUNG BADGE WARNA & CSS INJECTION
     # -------------------------------------------------------------------------
     all_months = df['BULAN'].unique().tolist() if 'BULAN' in df.columns else []
     default_ix = len(all_months)-1 if all_months else 0
     
-    # Render Dropdown Bulan
     col_f1, col_f2 = st.columns([2, 1])
     with col_f2:
         sel_mon = st.selectbox("Bulan:", all_months, index=default_ix, label_visibility="collapsed")
 
-    # Persiapan Data Bulan Ini vs Bulan Lalu untuk Tombol
     prev_mon_full_calc = get_prev_month_full(sel_mon)
     
-    # Filter Dataframe Bulan Ini & Bulan Lalu (Full)
     df_mon_curr = df[df['BULAN'] == sel_mon] if 'BULAN' in df.columns else df
     df_mon_prev = df[df['BULAN'] == prev_mon_full_calc] if (prev_mon_full_calc and 'BULAN' in df.columns) else pd.DataFrame()
     
@@ -309,8 +303,9 @@ else:
     
     cat_labels = []
     cat_map = {} 
+    dynamic_css = [] # Kita akan tampung aturan CSS dinamis disini
     
-    for c in final_cats_raw:
+    for idx, c in enumerate(final_cats_raw):
         # Hitung Curr
         df_c_curr = df_mon_curr[df_mon_curr['KATEGORI'] == c]
         if 'Complain' in c: 
@@ -329,30 +324,59 @@ else:
                 count_prev = len(df_c_prev)
             has_prev = True
             
-        # Hitung Persentase
+        # Tentukan Warna & Trend Text
         trend_str = ""
+        btn_color = "#888888" # Default Grey
+        border_color = "#444"
+        
         if has_prev:
             if count_prev > 0:
                 pct_change = ((count_curr - count_prev) / count_prev) * 100
                 if pct_change > 0:
-                    trend_str = f"| ▲ +{int(pct_change)}%" # Naik
+                    trend_str = f"| ▲ +{int(pct_change)}%" 
+                    btn_color = "#FF4B4B" # Merah (Naik/Bad)
+                    border_color = "#FF4B4B"
                 elif pct_change < 0:
-                    trend_str = f"| ▼ {int(pct_change)}%" # Turun
+                    trend_str = f"| ▼ {int(pct_change)}%"
+                    btn_color = "#00FF00" # Hijau (Turun/Good)
+                    border_color = "#00FF00"
                 else:
-                    trend_str = "| - 0%" # Sama
+                    trend_str = "| - 0%"
+                    btn_color = "#BBBBBB" # Putih/Grey (Sama)
+                    border_color = "#666"
             elif count_curr > 0:
-                trend_str = "| ▲ New" # Sebelumnya 0, sekarang ada
+                trend_str = "| ▲ New"
+                btn_color = "#FF4B4B" # New Issue is Bad
+                border_color = "#FF4B4B"
         
-        # Format Label: Elastic (51 | ▲ +10%)
+        # Buat Label
         label = f"{c} ({count_curr} {trend_str})"
         cat_labels.append(label)
         cat_map[label] = c
+        
+        # --- CSS INJECTION (JURUS RAHASIA) ---
+        # Kita target nth-of-type(idx+1) karena CSS index mulai dari 1
+        rule = f"""
+            div[role="radiogroup"] > label:nth-of-type({idx+1}) {{
+                border-color: {border_color} !important;
+                color: {btn_color} !important;
+                box-shadow: 0 0 4px {border_color}30; /* Soft Glow */
+            }}
+            div[role="radiogroup"] > label:nth-of-type({idx+1}) p {{
+                color: {btn_color} !important;
+                font-weight: bold;
+            }}
+        """
+        dynamic_css.append(rule)
+
+    # Inject Dynamic CSS
+    st.markdown(f"<style>{''.join(dynamic_css)}</style>", unsafe_allow_html=True)
 
     with col_f1:
         sel_cat_label = st.radio("Kategori:", cat_labels, index=0, horizontal=True, label_visibility="collapsed")
         sel_cat = cat_map[sel_cat_label]
 
-    # DATA FILTERING (LANJUTAN UTAMA)
+    # DATA FILTERING 
     df_cat = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
         df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
@@ -371,9 +395,7 @@ else:
     col_total_head = f"Σ {curr_mon_short.upper()}"
     is_complain_mode = 'Complain' in sel_cat
     
-    # -------------------------------------------------------------------------
-    # 1. GRAFIK TREN (SUPER SLIM - REQ NO. 1)
-    # -------------------------------------------------------------------------
+    # 1. GRAFIK TREN (SUPER SLIM)
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     if 'TANGGAL' in df_main.columns:
         if is_complain_mode:
@@ -404,7 +426,6 @@ else:
                 annotation_text=f"AVG: {avg_val:.1f}", 
                 annotation_position="bottom right"
             )
-            # TINGGI DIKURANGI JADI 170px (Slim Mode)
             fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -427,7 +448,7 @@ else:
         matrix_result, c_p, c_t = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
         st.dataframe(style_elegant(matrix_result, c_p, c_t), use_container_width=True)
         
-        with st.expander(f"📂 Rincian Cabang (Total: {len(df_main['CABANG'].unique())} Unit)", expanded=True): # Default Expanded agar kelihatan
+        with st.expander(f"📂 Rincian Cabang (Total: {len(df_main['CABANG'].unique())} Unit)", expanded=True):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
