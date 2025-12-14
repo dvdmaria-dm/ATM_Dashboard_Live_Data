@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Performance Monitoring", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "Monitoring Hub" Theme - V93 Alarm)
+# Styling CSS (The "Monitoring Hub" Theme - V94 Complete)
 st.markdown("""
 <style>
     /* 1. LAYOUTING */
@@ -183,6 +183,8 @@ def load_data():
             df['TID'] = df['TID'].astype(str).str.strip()
         if 'LOKASI' in df.columns:
             df['LOKASI'] = df['LOKASI'].astype(str)
+        if 'CABANG' in df.columns:
+            df['CABANG'] = df['CABANG'].astype(str)
 
         try:
             ws_slm = sh.worksheet(SHEET_SLM)
@@ -237,6 +239,7 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
+        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -499,21 +502,23 @@ else:
              sort_options = [col_total_head, 'W1', 'W2', 'W3', 'W4']
              sort_by = st.selectbox("Urutkan:", sort_options, index=0, label_visibility="collapsed")
         
-        if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
+        # --- UPDATE V94: MENAMBAHKAN CABANG KE GROUPING ---
+        if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
                 
-                grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
-                pivot_top5 = grouped_df.pivot_table(index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0)
+                # GROUP BY TID + LOKASI + CABANG
+                grouped_df = df_main.groupby(['TID', 'LOKASI', 'CABANG', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
+                pivot_top5 = grouped_df.pivot_table(index=['TID', 'LOKASI', 'CABANG'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0)
                 
                 desired_cols = ['W1', 'W2', 'W3', 'W4']
                 for c in desired_cols:
                     if c not in pivot_top5.columns: pivot_top5[c] = 0
                 pivot_top5 = pivot_top5[desired_cols]
                 
-                prev_grp_top5 = df_prev.groupby(['TID', 'LOKASI'])[val_col].agg(agg_func).reset_index(name=col_prev_head) if not df_prev.empty else pd.DataFrame(columns=['TID', 'LOKASI', col_prev_head])
-                prev_grp_top5 = prev_grp_top5.set_index(['TID', 'LOKASI'])
+                prev_grp_top5 = df_prev.groupby(['TID', 'LOKASI', 'CABANG'])[val_col].agg(agg_func).reset_index(name=col_prev_head) if not df_prev.empty else pd.DataFrame(columns=['TID', 'LOKASI', 'CABANG', col_prev_head])
+                prev_grp_top5 = prev_grp_top5.set_index(['TID', 'LOKASI', 'CABANG'])
                 
                 final_top5 = pivot_top5.join(prev_grp_top5, how='left').fillna(0)
                 final_top5[col_total_head] = final_top5[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
@@ -529,17 +534,17 @@ else:
                     st.info(f"Belum ada unit problem yang tercatat di {sort_by}.")
                 else:
                     today_dt = pd.Timestamp.now()
-                    
-                    # LOGIKA KATEGORI PENYAKIT (LAGGING VS REALTIME)
                     is_realtime_cat = sel_cat in ['DF Repeat', 'OUT Flm', 'Cash Out']
                     
                     for idx, row in top5_final.iterrows():
+                        # Unpack 3 index
                         tid_val = idx[0]
                         lokasi_val = idx[1]
+                        cabang_val = idx[2] # CABANG
+                        
                         total_val = int(row[col_total_head])
                         curr_mon_code = curr_mon_short.upper()
                         
-                        # --- HITUNG RECENCY & DIAGNOSIS BAHAYA ---
                         is_sick = False
                         time_str = "⏱️ ?"
                         
@@ -550,11 +555,10 @@ else:
                                 if pd.notna(last_date):
                                     days_diff = (today_dt - last_date).days
                                     
-                                    # LOGIKA PENYAKIT (ALARM)
                                     if is_realtime_cat:
-                                        if days_diff == 0: is_sick = True # Hari ini
-                                    else: # Elastic/Complain (H+1)
-                                        if days_diff <= 1: is_sick = True # Kemarin atau Hari ini
+                                        if days_diff == 0: is_sick = True
+                                    else: 
+                                        if days_diff <= 1: is_sick = True
                                     
                                     if days_diff == 0:
                                         time_str = "⏱️ Hari ini"
@@ -572,12 +576,11 @@ else:
                         prev_val_row = row[col_prev_head]
                         trend_emoji = "🔴" if total_val > prev_val_row else "🟢" if total_val < prev_val_row else "⚪"
                         
-                        # MODIFIKASI LABEL JIKA SAKIT
                         alert_prefix = "🚨 " if is_sick else ""
-                        label = f"{alert_prefix}{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {time_str} | {lokasi_val}"
+                        # LABEL BARU: TAMBAHKAN CABANG
+                        label = f"{alert_prefix}{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {time_str} | {lokasi_val} ({cabang_val})"
                         
                         with st.expander(label):
-                            # ANIMASI KEDAP KEDIP JIKA SAKIT
                             if is_sick:
                                 st.markdown(f"""
                                 <div class="blinking-alert">
