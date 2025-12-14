@@ -8,10 +8,10 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "Alive" Theme & Right Alignment Fix V2)
+# Styling CSS (The "Alive" Theme - V87)
 st.markdown("""
 <style>
-    /* 1. LAYOUTING COMPACT */
+    /* 1. LAYOUTING */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 2rem !important;
@@ -31,36 +31,20 @@ st.markdown("""
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* --- 2. LOGIKA RATA KANAN (RIGHT ALIGN) YANG LEBIH AGRESIF --- */
+    /* --- 2. RATA KANAN (DATA) & HEADER KIRI (DEFAULT STREAMLIT) --- */
+    /* Kita Hold dulu Rata Kanan Header agar tidak pusing, fokus ke Data Rata Kanan */
     
-    /* Target CELL DATA (td) */
     [data-testid="stDataFrame"] td {
         text-align: right !important;
     }
     
-    /* Target HEADER (th) - Ini kuncinya! */
-    [data-testid="stDataFrame"] th {
-        text-align: right !important;
-    }
-    
-    /* Target KONTAINER FLEX di dalam Header (Streamlit membungkus teks header di sini) */
-    [data-testid="stDataFrame"] th div {
-        justify-content: flex-end !important; /* Paksa konten flex ke kanan */
-        text-align: right !important;
-        display: flex !important;
-    }
-    
-    /* KECUALI KOLOM PERTAMA (Index/Nama Cabang/TID) -> KEMBALIKAN KE KIRI */
+    /* Kecuali Kolom Pertama (Index) Rata Kiri */
     [data-testid="stDataFrame"] thead tr th:first-child,
-    [data-testid="stDataFrame"] thead tr th:first-child div,
-    [data-testid="stDataFrame"] tbody th,
-    [data-testid="stDataFrame"] tbody th div {
+    [data-testid="stDataFrame"] tbody th {
         text-align: left !important;
-        justify-content: flex-start !important;
-        padding-left: 10px !important;
     }
 
-    /* --- 3. DESAIN INTERAKTIF --- */
+    /* --- 3. DESAIN TOMBOL KATEGORI "HIDUP" (BADGE STYLE) --- */
     div[role="radiogroup"] > label {
         font-size: 13px !important;
         font-weight: bold !important;
@@ -77,7 +61,12 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(255, 75, 75, 0.3);
         transform: translateY(-1px);
     }
+    /* Warna teks angka di dalam kurung (opsional, tergantung browser support) */
+    div[role="radiogroup"] > label p {
+        color: #ffffff;
+    }
 
+    /* --- 4. DESAIN "ALIVE" UNTUK TABEL & GRAFIK --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
         border-radius: 10px; 
@@ -219,7 +208,7 @@ def get_prev_month_full(curr_month):
     except:
         return None
 
-# --- STYLING ELEGANT FUNCTION (RIGHT ALIGN ENFORCED) ---
+# --- STYLING ELEGANT FUNCTION ---
 def style_elegant(df_to_style, col_prev, col_total):
     def highlight_trend(row):
         styles = [''] * len(row)
@@ -233,6 +222,7 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
+        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev.
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -248,10 +238,9 @@ def style_elegant(df_to_style, col_prev, col_total):
         'font-size': '11px'
     })
     
-    # FORMAT HEADERS: Right Align (Reinforcement)
+    # HEADER (Standard Streamlit Left/Center, but we try to keep clean)
     styler = styler.set_table_styles([
-        {'selector': 'th', 'props': [('text-align', 'right !important'), ('background-color', '#262730'), ('color', 'white')]},
-        {'selector': 'td', 'props': [('text-align', 'right !important')]}
+        {'selector': 'th', 'props': [('background-color', '#262730'), ('color', 'white')]},
     ])
     styler = styler.format(lambda x: "{:,.0f}".format(x) if (isinstance(x, (int, float)) and x != 0) else "")
     return styler
@@ -299,24 +288,53 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
+    # LOGIC: KITA BUTUH BULAN DULUAN UNTUK HITUNG BADGE TOMBOL
+    # Ambil Bulan Default (Terakhir)
+    all_months = df['BULAN'].unique().tolist() if 'BULAN' in df.columns else []
+    default_ix = len(all_months)-1 if all_months else 0
+    
+    # Kita render selectbox bulan di kolom kanan dulu (secara logika python)
+    # Tapi karena Streamlit render layout urut, kita akali dengan Placeholder atau Layout Columns.
+    
     col_f1, col_f2 = st.columns([2, 1])
-    with col_f1:
-        if 'KATEGORI' in df.columns:
-            fixed_order = ['Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'Cash Out']
-            available_cats = df['KATEGORI'].dropna().unique().tolist()
-            final_cats = [c for c in fixed_order if c in available_cats]
-            remaining = [c for c in available_cats if c not in final_cats]
-            final_cats.extend(remaining)
-            sel_cat = st.radio("Kategori:", final_cats, index=0, horizontal=True, label_visibility="collapsed")
-        else:
-            sel_cat = "Semua"
+    
     with col_f2:
-        if 'BULAN' in df.columns:
-            months = df['BULAN'].unique().tolist()
-            sel_mon = st.selectbox("Bulan:", months, index=len(months)-1 if months else 0, label_visibility="collapsed")
-        else:
-            sel_mon = "Semua"
+        # Render Bulan Dulu
+        sel_mon = st.selectbox("Bulan:", all_months, index=default_ix, label_visibility="collapsed")
+        
+    # LOGIC: HITUNG BADGE COUNTER BERDASARKAN BULAN TERPILIH
+    # Filter df by selected month first
+    df_mon_only = df[df['BULAN'] == sel_mon] if 'BULAN' in df.columns else df
+    
+    fixed_order = ['Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'Cash Out']
+    available_cats = df['KATEGORI'].dropna().unique().tolist() if 'KATEGORI' in df.columns else []
+    final_cats_raw = [c for c in fixed_order if c in available_cats]
+    remaining = [c for c in available_cats if c not in final_cats_raw]
+    final_cats_raw.extend(remaining)
+    
+    # Generate Label with Counts
+    cat_labels = []
+    cat_map = {} # Map "Elastic (50)" -> "Elastic"
+    
+    for c in final_cats_raw:
+        # Hitung total untuk kategori ini di bulan ini
+        df_c = df_mon_only[df_mon_only['KATEGORI'] == c]
+        if 'Complain' in c: # Jika complain, sum jumlah
+            count = df_c['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df_c.columns else 0
+        else: # Jika lainnya, count rows
+            count = len(df_c)
+            
+        label = f"{c} ({count})"
+        cat_labels.append(label)
+        cat_map[label] = c
 
+    with col_f1:
+        # Render Radio dengan Label Baru
+        sel_cat_label = st.radio("Kategori:", cat_labels, index=0, horizontal=True, label_visibility="collapsed")
+        # Ambil nama kategori asli dari map
+        sel_cat = cat_map[sel_cat_label]
+
+    # DATA FILTERING (LANJUTAN)
     df_cat = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
         df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
@@ -336,7 +354,7 @@ else:
     col_total_head = f"Σ {curr_mon_short.upper()}"
     is_complain_mode = 'Complain' in sel_cat
     
-    # GRAFIK TREN (LEBIH NAIK)
+    # 1. GRAFIK TREN (SMART CHART: AVERAGE LINE)
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     if 'TANGGAL' in df_main.columns:
         if is_complain_mode:
@@ -350,7 +368,12 @@ else:
             daily = daily.sort_values('TANGGAL')
             daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%d-%m-%Y')
             
+            # Hitung Rata-Rata
+            avg_val = daily[y_val].mean()
+            
             fig = px.area(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
+            
+            # Main Line
             fig.update_traces(
                 line_color='#FF4B4B', 
                 line_width=3,
@@ -359,6 +382,16 @@ else:
                 fill='tozeroy', 
                 fillcolor='rgba(255, 75, 75, 0.1)'
             )
+            
+            # ADD AVERAGE LINE (SMART FEATURE)
+            fig.add_hline(
+                y=avg_val, 
+                line_dash="dash", 
+                line_color="rgba(255, 255, 255, 0.5)", 
+                annotation_text=f"AVG: {avg_val:.1f}", 
+                annotation_position="bottom right"
+            )
+            
             fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -373,7 +406,7 @@ else:
         else:
             st.info("Data harian kosong.")
 
-    # DETAIL & SLM LOG
+    # 2. DETAIL & SLM LOG
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -381,7 +414,7 @@ else:
         matrix_result, c_p, c_t = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
         st.dataframe(style_elegant(matrix_result, c_p, c_t), use_container_width=True)
         
-        with st.expander(f"📂 Rincian Cabang"):
+        with st.expander(f"📂 Rincian Cabang (Total: {len(df_main['CABANG'].unique())} Unit)"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -400,6 +433,7 @@ else:
                     final_cabang[col_total_head] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
                     final_cols = [col_prev_head] + desired_cols + [col_total_head]
                     final_cabang = final_cabang[final_cols].sort_values(col_total_head, ascending=False)
+                    
                     st.dataframe(style_elegant(final_cabang, col_prev_head, col_total_head), use_container_width=True)
                 except Exception as e:
                     st.error(f"Error pivot: {e}")
