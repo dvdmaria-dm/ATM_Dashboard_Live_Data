@@ -8,51 +8,50 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "Alive" Theme - V87)
+# Styling CSS (The "One-Screen" Theme - V88)
 st.markdown("""
 <style>
-    /* 1. LAYOUTING */
+    /* 1. LAYOUTING EKSTREM (SANGAT RAPAT AGAR FIT 1 LAYAR) */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
+        padding-top: 0.5rem !important; /* Mepet atas */
+        padding-bottom: 1rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
     }
     
     /* TYPOGRAPHY */
-    h1 { font-size: 1.4rem !important; margin-bottom: 0.2rem !important; margin-top: 0rem !important;}
-    h2 { font-size: 1.2rem !important; margin-bottom: 0px !important;}
-    h3 { font-size: 1rem !important; margin-bottom: 5px !important; margin-top: 5px !important;}
+    h1 { font-size: 1.3rem !important; margin-bottom: 0rem !important; margin-top: 0rem !important;}
+    h2 { font-size: 1.1rem !important; margin-bottom: 0px !important;}
+    h3 { font-size: 0.9rem !important; margin-bottom: 2px !important; margin-top: 2px !important;}
     
     html, body, [class*="st-emotion-"] { 
-        font-size: 11px; 
+        font-size: 10px; /* Font global dikecilkan 1px biar muat */
     }
 
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* --- 2. RATA KANAN (DATA) & HEADER KIRI (DEFAULT STREAMLIT) --- */
-    /* Kita Hold dulu Rata Kanan Header agar tidak pusing, fokus ke Data Rata Kanan */
-    
+    /* --- 2. TABLE ALIGNMENT --- */
     [data-testid="stDataFrame"] td {
         text-align: right !important;
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
     }
-    
     /* Kecuali Kolom Pertama (Index) Rata Kiri */
     [data-testid="stDataFrame"] thead tr th:first-child,
     [data-testid="stDataFrame"] tbody th {
         text-align: left !important;
     }
 
-    /* --- 3. DESAIN TOMBOL KATEGORI "HIDUP" (BADGE STYLE) --- */
+    /* --- 3. DESAIN TOMBOL KATEGORI "INTELLIGENT" --- */
     div[role="radiogroup"] > label {
-        font-size: 13px !important;
+        font-size: 12px !important; /* Font tombol disesuaikan */
         font-weight: bold !important;
         background-color: #1E1E1E;
-        padding: 6px 12px; 
+        padding: 5px 10px; 
         border-radius: 6px;
         border: 1px solid #444;
-        margin-right: 5px;
+        margin-right: 4px;
         transition: all 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
@@ -61,16 +60,12 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(255, 75, 75, 0.3);
         transform: translateY(-1px);
     }
-    /* Warna teks angka di dalam kurung (opsional, tergantung browser support) */
-    div[role="radiogroup"] > label p {
-        color: #ffffff;
-    }
 
-    /* --- 4. DESAIN "ALIVE" UNTUK TABEL & GRAFIK --- */
+    /* --- 4. DESAIN "ALIVE" (CARD STYLE) --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
-        border-radius: 10px; 
-        padding: 8px;
+        border-radius: 8px; 
+        padding: 5px; /* Padding card dikurangi */
         background-color: #1a1a1a; 
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         transition: all 0.3s ease;
@@ -78,16 +73,18 @@ st.markdown("""
     
     [data-testid="stDataFrame"]:hover, .stPlotlyChart:hover {
         border-color: #555;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
     }
 
     .streamlit-expanderHeader {
-        font-size: 12px !important;
+        font-size: 11px !important;
         font-weight: bold !important;
         background-color: #262730 !important;
         color: white !important;
         border-radius: 5px;
         border: 1px solid #444;
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -222,7 +219,7 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
-        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev.
+        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -231,16 +228,14 @@ def style_elegant(df_to_style, col_prev, col_total):
 
     styler = df_to_style.style.apply(highlight_trend, axis=1)
     
-    # FORMAT DATA: Right Align
     styler = styler.set_properties(**{
         'text-align': 'right', 
         'vertical-align': 'middle', 
-        'font-size': '11px'
+        'font-size': '10px' # Font Tabel diperkecil sedikit
     })
     
-    # HEADER (Standard Streamlit Left/Center, but we try to keep clean)
     styler = styler.set_table_styles([
-        {'selector': 'th', 'props': [('background-color', '#262730'), ('color', 'white')]},
+        {'selector': 'th', 'props': [('background-color', '#262730'), ('color', 'white'), ('font-size', '10px')]},
     ])
     styler = styler.format(lambda x: "{:,.0f}".format(x) if (isinstance(x, (int, float)) and x != 0) else "")
     return styler
@@ -288,23 +283,23 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # LOGIC: KITA BUTUH BULAN DULUAN UNTUK HITUNG BADGE TOMBOL
-    # Ambil Bulan Default (Terakhir)
+    # -------------------------------------------------------------------------
+    # LOGIC: HITUNG BADGE TOMBOL DENGAN PERBANDINGAN BULAN LALU (REQ NO. 2)
+    # -------------------------------------------------------------------------
     all_months = df['BULAN'].unique().tolist() if 'BULAN' in df.columns else []
     default_ix = len(all_months)-1 if all_months else 0
     
-    # Kita render selectbox bulan di kolom kanan dulu (secara logika python)
-    # Tapi karena Streamlit render layout urut, kita akali dengan Placeholder atau Layout Columns.
-    
+    # Render Dropdown Bulan
     col_f1, col_f2 = st.columns([2, 1])
-    
     with col_f2:
-        # Render Bulan Dulu
         sel_mon = st.selectbox("Bulan:", all_months, index=default_ix, label_visibility="collapsed")
-        
-    # LOGIC: HITUNG BADGE COUNTER BERDASARKAN BULAN TERPILIH
-    # Filter df by selected month first
-    df_mon_only = df[df['BULAN'] == sel_mon] if 'BULAN' in df.columns else df
+
+    # Persiapan Data Bulan Ini vs Bulan Lalu untuk Tombol
+    prev_mon_full_calc = get_prev_month_full(sel_mon)
+    
+    # Filter Dataframe Bulan Ini & Bulan Lalu (Full)
+    df_mon_curr = df[df['BULAN'] == sel_mon] if 'BULAN' in df.columns else df
+    df_mon_prev = df[df['BULAN'] == prev_mon_full_calc] if (prev_mon_full_calc and 'BULAN' in df.columns) else pd.DataFrame()
     
     fixed_order = ['Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'Cash Out']
     available_cats = df['KATEGORI'].dropna().unique().tolist() if 'KATEGORI' in df.columns else []
@@ -312,29 +307,52 @@ else:
     remaining = [c for c in available_cats if c not in final_cats_raw]
     final_cats_raw.extend(remaining)
     
-    # Generate Label with Counts
     cat_labels = []
-    cat_map = {} # Map "Elastic (50)" -> "Elastic"
+    cat_map = {} 
     
     for c in final_cats_raw:
-        # Hitung total untuk kategori ini di bulan ini
-        df_c = df_mon_only[df_mon_only['KATEGORI'] == c]
-        if 'Complain' in c: # Jika complain, sum jumlah
-            count = df_c['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df_c.columns else 0
-        else: # Jika lainnya, count rows
-            count = len(df_c)
+        # Hitung Curr
+        df_c_curr = df_mon_curr[df_mon_curr['KATEGORI'] == c]
+        if 'Complain' in c: 
+            count_curr = df_c_curr['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df_c_curr.columns else 0
+        else: 
+            count_curr = len(df_c_curr)
             
-        label = f"{c} ({count})"
+        # Hitung Prev
+        count_prev = 0
+        has_prev = False
+        if not df_mon_prev.empty:
+            df_c_prev = df_mon_prev[df_mon_prev['KATEGORI'] == c]
+            if 'Complain' in c:
+                count_prev = df_c_prev['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df_c_prev.columns else 0
+            else:
+                count_prev = len(df_c_prev)
+            has_prev = True
+            
+        # Hitung Persentase
+        trend_str = ""
+        if has_prev:
+            if count_prev > 0:
+                pct_change = ((count_curr - count_prev) / count_prev) * 100
+                if pct_change > 0:
+                    trend_str = f"| ▲ +{int(pct_change)}%" # Naik
+                elif pct_change < 0:
+                    trend_str = f"| ▼ {int(pct_change)}%" # Turun
+                else:
+                    trend_str = "| - 0%" # Sama
+            elif count_curr > 0:
+                trend_str = "| ▲ New" # Sebelumnya 0, sekarang ada
+        
+        # Format Label: Elastic (51 | ▲ +10%)
+        label = f"{c} ({count_curr} {trend_str})"
         cat_labels.append(label)
         cat_map[label] = c
 
     with col_f1:
-        # Render Radio dengan Label Baru
         sel_cat_label = st.radio("Kategori:", cat_labels, index=0, horizontal=True, label_visibility="collapsed")
-        # Ambil nama kategori asli dari map
         sel_cat = cat_map[sel_cat_label]
 
-    # DATA FILTERING (LANJUTAN)
+    # DATA FILTERING (LANJUTAN UTAMA)
     df_cat = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
         df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
@@ -343,18 +361,19 @@ else:
     if sel_mon != "Semua" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
         
-    prev_mon_full = get_prev_month_full(sel_mon)
     df_prev = pd.DataFrame()
-    if prev_mon_full and 'BULAN' in df_cat.columns:
-        df_prev = df_cat[df_cat['BULAN'] == prev_mon_full]
+    if prev_mon_full_calc and 'BULAN' in df_cat.columns:
+        df_prev = df_cat[df_cat['BULAN'] == prev_mon_full_calc]
 
     curr_mon_short = get_short_month_name(sel_mon)
-    prev_mon_short = get_short_month_name(prev_mon_full) if prev_mon_full else "Prev"
+    prev_mon_short = get_short_month_name(prev_mon_full_calc) if prev_mon_full_calc else "Prev"
     col_prev_head = prev_mon_short
     col_total_head = f"Σ {curr_mon_short.upper()}"
     is_complain_mode = 'Complain' in sel_cat
     
-    # 1. GRAFIK TREN (SMART CHART: AVERAGE LINE)
+    # -------------------------------------------------------------------------
+    # 1. GRAFIK TREN (SUPER SLIM - REQ NO. 1)
+    # -------------------------------------------------------------------------
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     if 'TANGGAL' in df_main.columns:
         if is_complain_mode:
@@ -367,13 +386,9 @@ else:
         if not daily.empty:
             daily = daily.sort_values('TANGGAL')
             daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%d-%m-%Y')
-            
-            # Hitung Rata-Rata
             avg_val = daily[y_val].mean()
             
             fig = px.area(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
-            
-            # Main Line
             fig.update_traces(
                 line_color='#FF4B4B', 
                 line_width=3,
@@ -382,8 +397,6 @@ else:
                 fill='tozeroy', 
                 fillcolor='rgba(255, 75, 75, 0.1)'
             )
-            
-            # ADD AVERAGE LINE (SMART FEATURE)
             fig.add_hline(
                 y=avg_val, 
                 line_dash="dash", 
@@ -391,14 +404,14 @@ else:
                 annotation_text=f"AVG: {avg_val:.1f}", 
                 annotation_position="bottom right"
             )
-            
+            # TINGGI DIKURANGI JADI 170px (Slim Mode)
             fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 xaxis_title=None, 
                 yaxis_title=None, 
-                height=220, 
-                margin=dict(l=10, r=10, t=20, b=10), 
+                height=170, 
+                margin=dict(l=10, r=10, t=10, b=10), 
                 xaxis=dict(tickangle=0, type='category', showgrid=False),
                 yaxis=dict(showgrid=True, gridcolor='#333')
             )
@@ -414,7 +427,7 @@ else:
         matrix_result, c_p, c_t = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
         st.dataframe(style_elegant(matrix_result, c_p, c_t), use_container_width=True)
         
-        with st.expander(f"📂 Rincian Cabang (Total: {len(df_main['CABANG'].unique())} Unit)"):
+        with st.expander(f"📂 Rincian Cabang (Total: {len(df_main['CABANG'].unique())} Unit)", expanded=True): # Default Expanded agar kelihatan
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
@@ -441,7 +454,7 @@ else:
     with col_right:
         c_head1, c_head2 = st.columns([2, 1])
         with c_head1:
-             st.markdown(f"**🔥 Top 5 Problem Unit (Click to Expand)**")
+             st.markdown(f"**🔥 Top 5 Problem Unit**")
         with c_head2:
              sort_options = [col_total_head, 'W1', 'W2', 'W3', 'W4']
              sort_by = st.selectbox("Urutkan:", sort_options, index=0, label_visibility="collapsed")
