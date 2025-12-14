@@ -71,7 +71,7 @@ except Exception as e:
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        sh = gc.open_by_url(SHEET_ID)
+        sh = gc.open_by_url(SHEET_URL)
         ws = sh.worksheet(SHEET_NAME)
         values = ws.get_all_values()
 
@@ -209,6 +209,7 @@ with col_right:
         template="plotly_dark"
     )
     st.plotly_chart(fig, use_container_width=True)
+
 
 
 
