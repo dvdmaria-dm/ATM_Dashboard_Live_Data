@@ -8,7 +8,7 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "One-Screen" Theme - V89)
+# Styling CSS (The "One-Screen" Theme - V90 Balanced)
 st.markdown("""
 <style>
     /* 1. LAYOUTING EKSTREM (SANGAT RAPAT AGAR FIT 1 LAYAR) */
@@ -43,19 +43,21 @@ st.markdown("""
         text-align: left !important;
     }
 
-    /* --- 3. BASE DESAIN TOMBOL KATEGORI --- */
+    /* --- 3. BASE DESAIN TOMBOL KATEGORI (NEUTRAL) --- */
+    /* Kita kembalikan border ke warna standar (Abu-abu) agar tidak mencolok */
     div[role="radiogroup"] > label {
         font-size: 12px !important;
         font-weight: bold !important;
         background-color: #1E1E1E;
         padding: 6px 12px; 
         border-radius: 8px;
-        border: 1px solid #444; /* Default Border */
+        border: 1px solid #444; /* KEMBALI KE ABU-ABU */
         margin-right: 4px;
         transition: all 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     div[role="radiogroup"] > label:hover {
+        border-color: #888; /* Hover sedikit lebih terang */
         transform: translateY(-1px);
     }
     
@@ -217,7 +219,6 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
-        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -281,7 +282,7 @@ else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
     # -------------------------------------------------------------------------
-    # LOGIC UTAMA: HITUNG BADGE WARNA & CSS INJECTION
+    # LOGIC UTAMA: HITUNG BADGE WARNA
     # -------------------------------------------------------------------------
     all_months = df['BULAN'].unique().tolist() if 'BULAN' in df.columns else []
     default_ix = len(all_months)-1 if all_months else 0
@@ -303,7 +304,7 @@ else:
     
     cat_labels = []
     cat_map = {} 
-    dynamic_css = [] # Kita akan tampung aturan CSS dinamis disini
+    dynamic_css = [] 
     
     for idx, c in enumerate(final_cats_raw):
         # Hitung Curr
@@ -324,47 +325,38 @@ else:
                 count_prev = len(df_c_prev)
             has_prev = True
             
-        # Tentukan Warna & Trend Text
+        # Tentukan Warna Text (Tanpa Border Neon)
         trend_str = ""
-        btn_color = "#888888" # Default Grey
-        border_color = "#444"
+        # Default Warna Teks (Putih/Abu)
+        text_color = "#E0E0E0" 
         
         if has_prev:
             if count_prev > 0:
                 pct_change = ((count_curr - count_prev) / count_prev) * 100
                 if pct_change > 0:
                     trend_str = f"| ▲ +{int(pct_change)}%" 
-                    btn_color = "#FF4B4B" # Merah (Naik/Bad)
-                    border_color = "#FF4B4B"
+                    text_color = "#FF4B4B" # Merah (Naik)
                 elif pct_change < 0:
                     trend_str = f"| ▼ {int(pct_change)}%"
-                    btn_color = "#00FF00" # Hijau (Turun/Good)
-                    border_color = "#00FF00"
+                    text_color = "#00FF00" # Hijau (Turun)
                 else:
                     trend_str = "| - 0%"
-                    btn_color = "#BBBBBB" # Putih/Grey (Sama)
-                    border_color = "#666"
             elif count_curr > 0:
                 trend_str = "| ▲ New"
-                btn_color = "#FF4B4B" # New Issue is Bad
-                border_color = "#FF4B4B"
+                text_color = "#FF4B4B"
         
-        # Buat Label
         label = f"{c} ({count_curr} {trend_str})"
         cat_labels.append(label)
         cat_map[label] = c
         
-        # --- CSS INJECTION (JURUS RAHASIA) ---
-        # Kita target nth-of-type(idx+1) karena CSS index mulai dari 1
+        # --- CSS INJECTION (SUBTLE TEXT ONLY) ---
+        # Kita HAPUS border-color injection. Hanya mainkan warna teks.
         rule = f"""
             div[role="radiogroup"] > label:nth-of-type({idx+1}) {{
-                border-color: {border_color} !important;
-                color: {btn_color} !important;
-                box-shadow: 0 0 4px {border_color}30; /* Soft Glow */
+                color: {text_color} !important;
             }}
             div[role="radiogroup"] > label:nth-of-type({idx+1}) p {{
-                color: {btn_color} !important;
-                font-weight: bold;
+                color: {text_color} !important;
             }}
         """
         dynamic_css.append(rule)
