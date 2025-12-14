@@ -11,7 +11,7 @@ st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_
 # Styling CSS (Font Ultra-Compact Global dan Text Center Alignment)
 st.markdown("""
 <style>
-    /* V74 FIX: FONT & RATA TENGAH MUTLAK */
+    /* V73 FIX: FONT ULTRA-COMPACT & RATA TENGAH AGRESIV */
     
     /* Font Global Lebih Kecil (12px) */
     html, body, [class*="st-emotion-"] { 
@@ -28,20 +28,21 @@ st.markdown("""
         font-size: 9px !important; 
     }
     
-    /* TARGET MUTLAK BARU: Menggunakan selector CSS bawaan Streamlit yang lebih spesifik */
-    /* Target: Angka/Data di dalam tabel (sel <td>) */
+    /* TARGET MUTLAK: Paksa semua data sel (td) dan header kolom (th) rata tengah */
+    /* Ini menargetkan semua angka di dalam tabel */
     .dataframe td {
         text-align: center !important; 
-        padding: 5px 4px !important; 
+        padding: 5px 4px !important; /* Kurangi padding agar lebih compact */
     }
     
-    /* Target: Header Kolom (W1, W2, TOTAL, AVG) */
+    /* Target Mutlak: Pastikan Header Kolom (W1, W2, TOTAL, AVG) Rata Tengah */
     .dataframe th {
         text-align: center !important;
         padding: 5px 4px !important;
     }
 
     /* Khusus Header BARIS (Nama Cabang/TID/Lokasi) dikembalikan ke RATA KIRI */
+    /* Ini untuk estetika agar nama tidak terlihat aneh */
     .dataframe tbody th {
         text-align: left !important;
     }
@@ -247,7 +248,7 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon.title()})")
         
-        # 4. GRAFIK TREN HARIAN (V73 - TINGGI 250PX)
+        # 4. GRAFIK TREN HARIAN (V72 - TINGGI 250PX)
         if 'TANGGAL' in df_main.columns:
             if is_complain_mode:
                 daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
