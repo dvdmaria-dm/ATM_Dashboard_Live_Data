@@ -11,7 +11,7 @@ st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_
 # Styling CSS 
 st.markdown("""
 <style>
-    .block-container {padding-top: 3rem !important; padding-bottom: 3rem !important;}
+    .block-container {padding-top: 2rem !important; padding-bottom: 3rem !important;}
     .dataframe {font-size: 13px !important;}
     th {background-color: #262730 !important; color: white !important;}
     thead tr th:first-child {display:none}
@@ -80,7 +80,6 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
-            # 1. Convert ke Datetime dulu untuk sorting aman
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -144,6 +143,7 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
+    # --- BAGIAN FILTER ---
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -158,6 +158,7 @@ else:
         else:
             sel_mon = "Semua"
 
+    # --- FILTER DATA UTAMA ---
     df_main = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
         df_main = df_main[df_main['KATEGORI'] == sel_cat]
@@ -166,6 +167,48 @@ else:
 
     st.markdown("---")
     is_complain_mode = 'Complain' in sel_cat
+
+    # =========================================================================
+    # BAGIAN 1: GRAFIK TREN HARIAN (FULL WIDTH - DI ATAS)
+    # =========================================================================
+    st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
+    
+    if 'TANGGAL' in df_main.columns:
+        if is_complain_mode:
+            daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
+            y_val = 'JUMLAH_COMPLAIN'
+        else:
+            daily = df_main.groupby('TANGGAL').size().reset_index(name='TOTAL_FREQ')
+            y_val = 'TOTAL_FREQ'
+        
+        if not daily.empty:
+            # Logic V60: Sort Date asli -> Convert ke String YYYY-MM-DD
+            daily = daily.sort_values('TANGGAL')
+            daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+            
+            fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
+            fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
+            
+            # Layout Full Width, Tinggi sedikit disesuaikan agar proporsional
+            fig.update_layout(
+                xaxis_title=None, 
+                yaxis_title="Volume", 
+                height=350, # Sedikit lebih tinggi karena lebar
+                margin=dict(l=0, r=0, t=20, b=10),
+                xaxis=dict(
+                    tickangle=0, # Karena lebar, label bisa lurus (0) atau miring (-45) sesuai selera
+                    type='category' 
+                )
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Data harian kosong.")
+            
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # =========================================================================
+    # BAGIAN 2: DETAIL TABEL (SPLIT COLUMN DI BAWAH)
+    # =========================================================================
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -207,44 +250,3 @@ else:
                 st.dataframe(top5_final, use_container_width=True)
             except Exception as e:
                  st.error(f"Gagal Top 5: {e}")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader(f"📈 Tren Harian (Ticket Volume - {sel_mon})")
-        
-        # --- LOGIKA GRAFIK V60 (DATE OBJECT CONVERSION) ---
-        if 'TANGGAL' in df_main.columns:
-            if is_complain_mode:
-                daily = df_main.groupby('TANGGAL')['JUMLAH_COMPLAIN'].sum().reset_index()
-                y_val = 'JUMLAH_COMPLAIN'
-            else:
-                daily = df_main.groupby('TANGGAL').size().reset_index(name='TOTAL_FREQ')
-                y_val = 'TOTAL_FREQ'
-            
-            if not daily.empty:
-                # 1. Sort Data Berdasarkan Tanggal Asli (Biar urut waktu)
-                daily = daily.sort_values('TANGGAL')
-                
-                # 2. KONVERSI KE STRING UNTUK VISUALISASI
-                # Ini akan memaksa tanggal jadi teks "2024-12-21", membuang jam total.
-                daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
-                
-                # 3. Plot menggunakan String Column sebagai X
-                # Dengan cara ini, Plotly melihatnya sebagai Kategori/Text, bukan Waktu.
-                # Jadi tidak akan ada jam yang muncul.
-                fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
-                fig.update_traces(line_color='#FF4B4B', line_width=3, textposition="top center")
-                
-                fig.update_layout(
-                    xaxis_title=None, 
-                    yaxis_title="Volume", 
-                    height=300,
-                    margin=dict(l=0, r=0, t=20, b=10),
-                    xaxis=dict(
-                        tickangle=-45,
-                        type='category' # Paksa sumbu X jadi kategori biar label string muncul pas
-                    )
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Data harian kosong.")
-
