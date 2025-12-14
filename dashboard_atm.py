@@ -32,7 +32,7 @@ tbody th { display:none }
 # =========================================================
 # 2. KONFIGURASI GOOGLE SHEET
 # =========================================================
-SHEET_ID = "1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit?gid=98670277#gid=98670277"
 SHEET_NAME = "AIMS_Master"
 
 # =========================================================
@@ -71,7 +71,7 @@ except Exception as e:
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        sh = gc.open_by_key(SHEET_ID)
+        sh = gc.open_by_url(SHEET_ID)
         ws = sh.worksheet(SHEET_NAME)
         values = ws.get_all_values()
 
@@ -209,5 +209,6 @@ with col_right:
         template="plotly_dark"
     )
     st.plotly_chart(fig, use_container_width=True)
+
 
 
