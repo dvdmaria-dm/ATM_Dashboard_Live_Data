@@ -32,7 +32,7 @@ tbody th { display:none }
 # =========================================================
 # 2. KONFIGURASI GOOGLE SHEET
 # =========================================================
-SHEET_URL = "https://docs.google.com/sheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
+SHEET_URL = "1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340"
 SHEET_NAME = "AIMS_Master"
 
 # =========================================================
@@ -209,3 +209,4 @@ with col_right:
         template="plotly_dark"
     )
     st.plotly_chart(fig, use_container_width=True)
+
