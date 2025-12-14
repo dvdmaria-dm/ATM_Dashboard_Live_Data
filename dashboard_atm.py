@@ -8,58 +8,40 @@ import re
 # --- 1. KONFIGURASI HALAMAN (WIDE & COMPACT) ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Ultra Compact & Rata Tengah Mutlak)
+# Styling CSS (Layout Compact)
 st.markdown("""
 <style>
-    /* 1. PERBAIKAN JUDUL TERPOTONG: Padding atas dikembalikan sedikit */
+    /* LAYOUTING */
     .block-container {
-        padding-top: 2.5rem !important; /* Diberi ruang biar Judul tidak kepotong */
+        padding-top: 2.5rem !important;
         padding-bottom: 1rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
     }
     
-    /* 2. MENGECILKAN HEADER */
+    /* HEADER */
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem !important;}
     h2 { font-size: 1.2rem !important; margin-bottom: 0px !important;}
     h3 { font-size: 1.1rem !important; margin-bottom: 5px !important;}
     
-    /* 3. FONT GLOBAL LEBIH KECIL (11px) */
+    /* FONT GLOBAL */
     html, body, [class*="st-emotion-"] { 
         font-size: 11px; 
     }
 
-    /* 4. TABEL RATA TENGAH MUTLAK */
-    .dataframe {
-        font-size: 10px !important; 
-    }
-    /* Target SEMUA sel data (td) agar Rata Tengah */
-    .dataframe td {
-        text-align: center !important; 
-        padding: 3px 5px !important;
-        white-space: nowrap; /* Mencegah teks turun baris biar rapi */
-    }
-    /* Target SEMUA header kolom (th) agar Rata Tengah */
-    .dataframe th {
-        text-align: center !important;
-        padding: 3px 5px !important;
-        font-size: 10px !important;
-    }
-    /* KECUALI Kolom Pertama (Nama Cabang/Lokasi) biarkan Rata Kiri biar enak dibaca */
-    .dataframe tbody th {
-        text-align: left !important;
-    }
-    
-    /* 5. MEMBUANG ELEMEN PENGGANGGU */
+    /* HAPUS ELEMEN PENGGANGGU */
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* Warna Header Tabel */
-    th {background-color: #262730 !important; color: white !important;}
-    
-    /* Margin Grafik Nol */
+    /* PLOTLY MARGIN */
     .js-plotly-plot {margin-bottom: 0px !important;}
     .stPlotlyChart {margin-bottom: 0px !important;}
+    
+    /* KOREKSI WARNA HEADER TABEL (Untuk Pandas Styler) */
+    th {
+        background-color: #262730 !important; 
+        color: white !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,9 +104,7 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
-            # PERBAIKAN NO. 3: TANGGAL
-            # Mengubah dayfirst=False karena kecurigaan format MM/DD/YYYY atau pembacaan terbalik
-            # Ini akan mengatasi masalah data stop di tanggal 12
+            # Tetap dayfirst=False untuk mengatasi masalah data hilang di atas tgl 12
             df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=False, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
@@ -136,7 +116,8 @@ def load_data():
             df['WEEK'] = df['BULAN_WEEK']
             
         if 'BULAN' in df.columns:
-            df['BULAN'] = df['BULAN'].astype(str).str.strip()
+            # Title Case agar "december" jadi "December"
+            df['BULAN'] = df['BULAN'].astype(str).str.strip().str.title()
             
         if 'TID' in df.columns:
             df['TID'] = df['TID'].astype(str)
@@ -149,35 +130,73 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame()
 
-# --- 3. LOGIKA MATRIX ---
-def build_executive_summary(df_curr, is_complain_mode):
+# --- HELPER: GET PREVIOUS MONTH ---
+def get_prev_month_name(curr_month):
+    months = ['January', 'February', 'March', 'April', 'May', 'June', 
+              'July', 'August', 'September', 'October', 'November', 'December']
+    try:
+        curr_idx = months.index(curr_month)
+        prev_idx = (curr_idx - 1) if curr_idx > 0 else 11
+        return months[prev_idx]
+    except:
+        return None
+
+# --- HELPER: STYLE DATAFRAME (CENTER ALIGN ALTERNATIVE) ---
+def style_dataframe(df_to_style):
+    # Menggunakan Pandas Styler untuk memaksa rata tengah dari Python
+    return df_to_style.style.set_properties(**{
+        'text-align': 'center', 
+        'white-space': 'nowrap',
+        'font-size': '10px'
+    }).set_table_styles([
+        dict(selector='th', props=[('text-align', 'center'), ('font-size', '10px')]),
+        dict(selector='td', props=[('text-align', 'center')])
+    ]).highlight_max(axis=1, color='#262730', subset=[c for c in df_to_style.columns if c not in ['LOKASI', 'CABANG']]).format("{:,.0f}")
+
+# --- 3. LOGIKA MATRIX (MODIFIED FOR CONTINUITY) ---
+def build_executive_summary(df_curr, df_prev, is_complain_mode, prev_month_name, curr_month_name):
+    # 1. Hitung Data Bulan Ini (Per Minggu)
     weeks = ['W1', 'W2', 'W3', 'W4']
     row_ticket = {}
-    total_ticket = 0
+    row_tid = {}
+    
+    total_ticket_curr = 0
+    total_tid_set_curr = set()
+
     for w in weeks:
+        # Ticket
         df_week = df_curr[df_curr['WEEK'] == w] if 'WEEK' in df_curr.columns else pd.DataFrame()
         val = df_week['JUMLAH_COMPLAIN'].sum() if is_complain_mode and not df_week.empty else len(df_week) if not df_week.empty else 0
         row_ticket[w] = val
-        total_ticket += val
-    
-    row_ticket['TOTAL'] = total_ticket
-    row_ticket['AVG/WEEK'] = round(total_ticket / 4, 1)
-
-    row_tid = {}
-    total_tid_set = set()
-    for w in weeks:
+        total_ticket_curr += val
+        
+        # TID
         tids = df_curr[df_curr['WEEK'] == w]['TID'].unique() if 'WEEK' in df_curr.columns and 'TID' in df_curr.columns else []
-        count = len(tids)
-        row_tid[w] = count
-        total_tid_set.update(tids)
-    
-    row_tid['TOTAL'] = len(total_tid_set)
-    row_tid['AVG/WEEK'] = round(len(total_tid_set) / 4, 1)
+        row_tid[w] = len(tids)
+        total_tid_set_curr.update(tids)
 
+    # 2. Hitung Data Bulan Lalu (Total Saja)
+    val_prev = df_prev['JUMLAH_COMPLAIN'].sum() if is_complain_mode and not df_prev.empty else len(df_prev) if not df_prev.empty else 0
+    tid_prev = len(df_prev['TID'].unique()) if 'TID' in df_prev.columns and not df_prev.empty else 0
+
+    # 3. Susun Kolom
+    col_prev = f"{prev_month_name}"
+    col_total = f"TOTAL {curr_month_name.upper()}"
+    
+    row_ticket[col_prev] = val_prev
+    row_ticket[col_total] = total_ticket_curr
+    
+    row_tid[col_prev] = tid_prev
+    row_tid[col_total] = len(total_tid_set_curr)
+
+    # DataFrame
     matrix_df = pd.DataFrame([row_ticket, row_tid], index=['Global Ticket (Freq)', 'Global Unique TID'])
-    cols_order = ['W1', 'W2', 'W3', 'W4', 'TOTAL', 'AVG/WEEK']
+    
+    # Reorder Columns: Prev -> W1..W4 -> Total
+    cols_order = [col_prev, 'W1', 'W2', 'W3', 'W4', col_total]
     for c in cols_order:
         if c not in matrix_df.columns: matrix_df[c] = 0
+        
     return matrix_df[cols_order]
 
 # --- 4. UI DASHBOARD ---
@@ -188,7 +207,7 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER (Compact)
+    # FILTER
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -200,24 +219,35 @@ else:
     with col_f2:
         if 'BULAN' in df.columns:
             months = df['BULAN'].unique().tolist()
+            # Sortir manual jika memungkinkan, atau default order
             sel_mon = st.selectbox("Bulan:", months, index=len(months)-1 if months else 0, label_visibility="collapsed")
             st.caption(f"Bulan: **{sel_mon}**")
         else:
             sel_mon = "Semua"
 
     # DATA FILTERING
-    df_main = df.copy()
-    if sel_cat != "Semua" and 'KATEGORI' in df_main.columns:
-        df_main = df_main[df_main['KATEGORI'] == sel_cat]
+    # 1. Filter Kategori dulu untuk semua data
+    df_cat = df.copy()
+    if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
+        df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
+        
+    # 2. Data Bulan Ini (Current)
+    df_main = df_cat.copy()
     if sel_mon != "Semua" and 'BULAN' in df_main.columns:
         df_main = df_main[df_main['BULAN'] == sel_mon]
+        
+    # 3. Data Bulan Lalu (Previous)
+    prev_mon = get_prev_month_name(sel_mon)
+    df_prev = pd.DataFrame()
+    if prev_mon and 'BULAN' in df_cat.columns:
+        df_prev = df_cat[df_cat['BULAN'] == prev_mon]
 
     is_complain_mode = 'Complain' in sel_cat
     
     st.markdown("---") 
 
     # =========================================================================
-    # BAGIAN 1: GRAFIK TREN (PERBAIKAN TINGGI & FORMAT TANGGAL)
+    # BAGIAN 1: GRAFIK TREN (Full Width, Compact Height)
     # =========================================================================
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     
@@ -231,51 +261,71 @@ else:
         
         if not daily.empty:
             daily = daily.sort_values('TANGGAL')
-            # Tampilkan tanggal dengan format Indonesia DD-MM-YYYY agar tidak ambigu
             daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%d-%m-%Y')
             
             fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
             fig.update_traces(line_color='#FF4B4B', line_width=2, textposition="top center")
             
-            # Layout Sangat Compact (Tinggi 180px - Perbaikan No. 2)
             fig.update_layout(
                 xaxis_title=None, 
                 yaxis_title=None,
                 height=180, 
                 margin=dict(l=10, r=10, t=10, b=10),
-                xaxis=dict(
-                    tickangle=0, 
-                    type='category' 
-                )
+                xaxis=dict(tickangle=0, type='category')
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Data harian kosong.")
 
     # =========================================================================
-    # BAGIAN 2: TABEL
+    # BAGIAN 2: TABEL (CONTINUITY & CENTERED)
     # =========================================================================
     col_left, col_right = st.columns(2)
+    
+    # Nama Kolom Dinamis
+    col_prev_name = prev_mon if prev_mon else "Prev Month"
+    col_curr_total_name = f"TOTAL {sel_mon.upper()}"
 
     with col_left:
         st.markdown(f"**🌏 {sel_cat} Overview**")
-        matrix_result = build_executive_summary(df_main, is_complain_mode)
-        # Tampilkan tabel tanpa index (hide_index) jika memungkinkan, atau format standar
-        st.dataframe(matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), use_container_width=True)
         
+        # 1. BUILD OVERVIEW MATRIX
+        matrix_result = build_executive_summary(df_main, df_prev, is_complain_mode, col_prev_name, sel_mon)
+        # Apply Style
+        st.dataframe(style_dataframe(matrix_result), use_container_width=True)
+        
+        # 2. RINCIAN CABANG (WITH PREV MONTH)
         with st.expander(f"📂 Rincian Cabang"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
                     val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                     agg_func = 'sum' if is_complain_mode else 'count'
-                    pivot_cabang = df_main.pivot_table(index='CABANG', columns='WEEK', values=val_col, aggfunc=agg_func, fill_value=0)
+                    
+                    # A. Data Bulan Ini (Pivot W1-W4)
+                    pivot_curr = df_main.pivot_table(index='CABANG', columns='WEEK', values=val_col, aggfunc=agg_func, fill_value=0)
                     desired_cols = ['W1', 'W2', 'W3', 'W4']
                     for c in desired_cols:
-                        if c not in pivot_cabang.columns: pivot_cabang[c] = 0
-                    pivot_cabang = pivot_cabang[desired_cols]
-                    pivot_cabang['TOTAL'] = pivot_cabang.sum(axis=1)
-                    pivot_cabang = pivot_cabang.sort_values('TOTAL', ascending=False)
-                    st.dataframe(pivot_cabang, use_container_width=True)
+                        if c not in pivot_curr.columns: pivot_curr[c] = 0
+                    pivot_curr = pivot_curr[desired_cols]
+                    
+                    # B. Data Bulan Lalu (Groupby)
+                    prev_grp = df_prev.groupby('CABANG')[val_col].agg(agg_func).reset_index(name=col_prev_name) if not df_prev.empty else pd.DataFrame(columns=['CABANG', col_prev_name])
+                    prev_grp = prev_grp.set_index('CABANG')
+                    
+                    # C. Merge
+                    final_cabang = pivot_curr.join(prev_grp, how='left').fillna(0)
+                    
+                    # D. Hitung Total Bulan Ini
+                    final_cabang[col_curr_total_name] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
+                    
+                    # E. Reorder & Sort
+                    final_cols = [col_prev_name] + desired_cols + [col_curr_total_name]
+                    final_cabang = final_cabang[final_cols]
+                    final_cabang = final_cabang.sort_values(col_curr_total_name, ascending=False)
+                    
+                    # F. Display Style
+                    st.dataframe(style_dataframe(final_cabang), use_container_width=True)
+                    
                 except Exception as e:
                     st.error(f"Error pivot: {e}")
 
@@ -285,14 +335,34 @@ else:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
+                
+                # A. Data Bulan Ini (Group & Pivot)
                 grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
                 pivot_top5 = grouped_df.pivot_table(index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0)
                 desired_cols = ['W1', 'W2', 'W3', 'W4']
                 for c in desired_cols:
                     if c not in pivot_top5.columns: pivot_top5[c] = 0
                 pivot_top5 = pivot_top5[desired_cols]
-                pivot_top5['TOTAL'] = pivot_top5.sum(axis=1)
-                top5_final = pivot_top5.sort_values('TOTAL', ascending=False).head(5)
-                st.dataframe(top5_final, use_container_width=True)
+                
+                # B. Data Bulan Lalu
+                prev_grp_top5 = df_prev.groupby(['TID', 'LOKASI'])[val_col].agg(agg_func).reset_index(name=col_prev_name) if not df_prev.empty else pd.DataFrame(columns=['TID', 'LOKASI', col_prev_name])
+                prev_grp_top5 = prev_grp_top5.set_index(['TID', 'LOKASI'])
+                
+                # C. Merge
+                final_top5 = pivot_top5.join(prev_grp_top5, how='left').fillna(0)
+                
+                # D. Total & Sort
+                final_top5[col_curr_total_name] = final_top5[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
+                
+                # E. Reorder
+                final_cols_top = [col_prev_name] + desired_cols + [col_curr_total_name]
+                final_top5 = final_top5[final_cols_top]
+                
+                # F. Filter Top 5 based on Current Total
+                top5_final = final_top5.sort_values(col_curr_total_name, ascending=False).head(5)
+                
+                # G. Display Style
+                st.dataframe(style_dataframe(top5_final), use_container_width=True)
+                
             except Exception as e:
                  st.error(f"Error Top 5: {e}")
