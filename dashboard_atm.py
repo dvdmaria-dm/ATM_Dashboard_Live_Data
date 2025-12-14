@@ -8,53 +8,54 @@ import re
 # --- 1. KONFIGURASI HALAMAN (WIDE & COMPACT) ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Ultra Compact untuk Satu Layar Penuh)
+# Styling CSS (Ultra Compact & Rata Tengah Mutlak)
 st.markdown("""
 <style>
-    /* 1. MENGECILKAN JARAK ANTAR ELEMEN (PADDING) */
+    /* 1. PERBAIKAN JUDUL TERPOTONG: Padding atas dikembalikan sedikit */
     .block-container {
-        padding-top: 1.5rem !important; /* Jarak atas sangat minim */
+        padding-top: 2.5rem !important; /* Diberi ruang biar Judul tidak kepotong */
         padding-bottom: 1rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
     }
     
-    /* 2. MENGECILKAN HEADER AGAR TIDAK MAKAN TEMPAT */
-    h1 { font-size: 1.4rem !important; margin-bottom: 0px !important; padding-bottom: 0px !important;}
-    h2 { font-size: 1.2rem !important; margin-bottom: 0px !important; padding-bottom: 0px !important;}
-    h3 { font-size: 1.1rem !important; margin-bottom: 5px !important; padding-bottom: 0px !important;}
+    /* 2. MENGECILKAN HEADER */
+    h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem !important;}
+    h2 { font-size: 1.2rem !important; margin-bottom: 0px !important;}
+    h3 { font-size: 1.1rem !important; margin-bottom: 5px !important;}
     
     /* 3. FONT GLOBAL LEBIH KECIL (11px) */
     html, body, [class*="st-emotion-"] { 
         font-size: 11px; 
     }
 
-    /* 4. TABEL ULTRA RINGKAS & RATA TENGAH */
+    /* 4. TABEL RATA TENGAH MUTLAK */
     .dataframe {
         font-size: 10px !important; 
     }
+    /* Target SEMUA sel data (td) agar Rata Tengah */
     .dataframe td {
         text-align: center !important; 
-        padding: 2px 4px !important; /* Padding sel sangat tipis */
+        padding: 3px 5px !important;
+        white-space: nowrap; /* Mencegah teks turun baris biar rapi */
     }
+    /* Target SEMUA header kolom (th) agar Rata Tengah */
     .dataframe th {
         text-align: center !important;
-        padding: 2px 4px !important;
+        padding: 3px 5px !important;
         font-size: 10px !important;
     }
-    /* Header Baris (Nama Cabang) Rata Kiri */
+    /* KECUALI Kolom Pertama (Nama Cabang/Lokasi) biarkan Rata Kiri biar enak dibaca */
     .dataframe tbody th {
         text-align: left !important;
     }
     
     /* 5. MEMBUANG ELEMEN PENGGANGGU */
-    #MainMenu, footer {visibility: hidden;}
+    #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
     /* Warna Header Tabel */
     th {background-color: #262730 !important; color: white !important;}
-    thead tr th:first-child {display:none}
-    tbody th {display:none}
     
     /* Margin Grafik Nol */
     .js-plotly-plot {margin-bottom: 0px !important;}
@@ -121,7 +122,10 @@ def load_data():
         df = df.loc[:, ~df.columns.duplicated()]
 
         if 'TANGGAL' in df.columns:
-            df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=True, errors='coerce')
+            # PERBAIKAN NO. 3: TANGGAL
+            # Mengubah dayfirst=False karena kecurigaan format MM/DD/YYYY atau pembacaan terbalik
+            # Ini akan mengatasi masalah data stop di tanggal 12
+            df['TANGGAL'] = pd.to_datetime(df['TANGGAL'], dayfirst=False, errors='coerce')
         
         if 'JUMLAH_COMPLAIN' in df.columns:
              df['JUMLAH_COMPLAIN'] = pd.to_numeric(df['JUMLAH_COMPLAIN'].astype(str).str.replace('-', '0'), errors='coerce').fillna(0).astype(int)
@@ -182,16 +186,15 @@ df = load_data()
 if df.empty:
     st.warning("Data belum tersedia.")
 else:
-    # Header sangat tipis
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER (Dibuat Compact)
+    # FILTER (Compact)
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
             cats = sorted(df['KATEGORI'].dropna().unique().tolist())
-            sel_cat = st.radio("Kategori:", cats, index=0, horizontal=True, label_visibility="collapsed") # Label disembunyikan biar hemat
-            st.caption(f"Kategori Terpilih: **{sel_cat}**") # Ganti label dengan caption kecil
+            sel_cat = st.radio("Kategori:", cats, index=0, horizontal=True, label_visibility="collapsed")
+            st.caption(f"Kategori: **{sel_cat}**") 
         else:
             sel_cat = "Semua"
     with col_f2:
@@ -214,9 +217,8 @@ else:
     st.markdown("---") 
 
     # =========================================================================
-    # BAGIAN 1: GRAFIK TREN (POSISI ATAS - FULL WIDTH - PENDEK)
+    # BAGIAN 1: GRAFIK TREN (PERBAIKAN TINGGI & FORMAT TANGGAL)
     # =========================================================================
-    # st.subheader hemat ruang dengan markdown bold kecil
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     
     if 'TANGGAL' in df_main.columns:
@@ -229,17 +231,18 @@ else:
         
         if not daily.empty:
             daily = daily.sort_values('TANGGAL')
-            daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%Y-%m-%d')
+            # Tampilkan tanggal dengan format Indonesia DD-MM-YYYY agar tidak ambigu
+            daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%d-%m-%Y')
             
             fig = px.line(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
-            fig.update_traces(line_color='#FF4B4B', line_width=2, textposition="top center") # Line width dikecilkan sedikit
+            fig.update_traces(line_color='#FF4B4B', line_width=2, textposition="top center")
             
-            # Layout Sangat Compact (Tinggi 220px)
+            # Layout Sangat Compact (Tinggi 180px - Perbaikan No. 2)
             fig.update_layout(
                 xaxis_title=None, 
-                yaxis_title=None, # Hilangkan label sumbu Y biar hemat
-                height=220, # TINGGI DIKURANGI AGAR MUAT 1 LAYAR
-                margin=dict(l=10, r=10, t=15, b=10), # Margin tipis
+                yaxis_title=None,
+                height=180, 
+                margin=dict(l=10, r=10, t=10, b=10),
                 xaxis=dict(
                     tickangle=0, 
                     type='category' 
@@ -250,16 +253,16 @@ else:
             st.info("Data harian kosong.")
 
     # =========================================================================
-    # BAGIAN 2: TABEL (SPLIT COLUMN DI BAWAH GRAFIK)
+    # BAGIAN 2: TABEL
     # =========================================================================
     col_left, col_right = st.columns(2)
 
     with col_left:
         st.markdown(f"**🌏 {sel_cat} Overview**")
         matrix_result = build_executive_summary(df_main, is_complain_mode)
+        # Tampilkan tabel tanpa index (hide_index) jika memungkinkan, atau format standar
         st.dataframe(matrix_result.style.highlight_max(axis=1, color='#262730').format("{:,.0f}"), use_container_width=True)
         
-        # Expander default closed biar hemat, user klik kalau butuh detail
         with st.expander(f"📂 Rincian Cabang"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
                 try:
