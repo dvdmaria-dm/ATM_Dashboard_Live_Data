@@ -8,7 +8,7 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Ultra Compact & DEEP Center Alignment)
+# Styling CSS (Ultra Compact, Kategori Besar & Rata Tengah Mutlak)
 st.markdown("""
 <style>
     /* LAYOUTING */
@@ -37,20 +37,52 @@ st.markdown("""
     .js-plotly-plot {margin-bottom: 0px !important;}
     .stPlotlyChart {margin-bottom: 0px !important;}
     
-    /* --- CSS RATA TENGAH TINGKAT LANJUT --- */
-    /* Menargetkan div di dalam sel tabel (Streamlit membungkus data dalam div) */
-    [data-testid="stDataFrame"] table td div {
-        text-align: center !important;
-        justify-content: center !important;
+    /* --- CSS PERBAIKAN RATA TENGAH (THE FINAL BOSS) --- */
+    /* Target tabel dataframe secara spesifik */
+    [data-testid="stDataFrame"] {
+        width: 100%;
     }
-    [data-testid="stDataFrame"] table th div {
+    
+    /* Target Header (th) */
+    [data-testid="stDataFrame"] th {
         text-align: center !important;
-        justify-content: center !important;
+        background-color: #262730 !important; 
+        color: white !important;
+        font-size: 11px !important;
     }
-    /* Kecuali kolom pertama (index/nama cabang) rata kiri */
-    [data-testid="stDataFrame"] table tbody th div {
+    
+    /* Target Cell (td) */
+    [data-testid="stDataFrame"] td {
+        text-align: center !important;
+        font-size: 11px !important;
+    }
+    
+    /* Target DIV di dalam Header & Cell (Ini kuncinya!) */
+    [data-testid="stDataFrame"] div[data-testid="stVerticalBlock"] > div {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* Kecuali Kolom Pertama (Index/Nama Cabang) Rata Kiri */
+    [data-testid="stDataFrame"] tbody th, 
+    [data-testid="stDataFrame"] tbody th div {
         text-align: left !important;
         justify-content: flex-start !important;
+    }
+
+    /* --- STYLING RADIO BUTTON (KATEGORI) AGAR BESAR --- */
+    div[role="radiogroup"] > label {
+        font-size: 14px !important; /* Huruf lebih besar */
+        font-weight: bold !important;
+        background-color: #1E1E1E;
+        padding: 5px 10px;
+        border-radius: 5px;
+        border: 1px solid #444;
+        margin-right: 5px;
+    }
+    div[role="radiogroup"] > label:hover {
+        border-color: #FF4B4B;
     }
     
     /* Styling Expander Top 5 */
@@ -65,10 +97,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. KONEKSI DATA ---
-# URL Sheet tetap sama, kita hanya akses worksheet berbeda nanti
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_MAIN = 'AIMS_Master'
-SHEET_SLM = 'SLM Visit Log' # Nama Sheet baru
+SHEET_SLM = 'SLM Visit Log'
 
 try:
     if "gcp_service_account" not in st.secrets:
@@ -153,31 +184,16 @@ def load_data():
                 h_slm = slm_values[0]
                 r_slm = slm_values[1:]
                 df_slm = pd.DataFrame(r_slm, columns=h_slm)
-                
-                # Cleaning SLM Header
                 df_slm.columns = df_slm.columns.str.strip().str.upper()
-                
-                # Pastikan TID string
                 if 'TID' in df_slm.columns:
                     df_slm['TID'] = df_slm['TID'].astype(str).str.strip()
-                    
-                # Cari Kolom Tanggal Visit (Fleksibel)
                 date_cols = [c for c in df_slm.columns if 'TGL' in c or 'VISIT' in c or 'DATE' in c]
-                if date_cols:
-                    df_slm['TGL_VISIT'] = df_slm[date_cols[0]]
-                else:
-                    df_slm['TGL_VISIT'] = "-"
-                    
-                # Cari Kolom Action (Fleksibel)
+                df_slm['TGL_VISIT'] = df_slm[date_cols[0]] if date_cols else "-"
                 act_cols = [c for c in df_slm.columns if 'ACTION' in c or 'TINDAKAN' in c or 'KET' in c]
-                if act_cols:
-                    df_slm['ACTION'] = df_slm[act_cols[0]]
-                else:
-                    df_slm['ACTION'] = "-"
+                df_slm['ACTION'] = df_slm[act_cols[0]] if act_cols else "-"
             else:
                 df_slm = pd.DataFrame()
         except:
-            # Jika sheet SLM belum ada, buat dataframe kosong agar tidak error
             df_slm = pd.DataFrame(columns=['TID', 'TGL_VISIT', 'ACTION'])
             
         return df, df_slm
@@ -201,9 +217,69 @@ def get_prev_month_full(curr_month):
     except:
         return None
 
-def style_dataframe(df_to_style):
-    df_clean = df_to_style.replace(0, "")
-    return df_clean.style.format(lambda x: "{:,.0f}".format(x) if x != "" else "")
+# --- STYLING ELEGANT FUNCTION (COLOR CODED) ---
+def style_elegant(df_to_style, col_prev, col_total):
+    """
+    Fungsi ini melakukan 3 hal:
+    1. Mengganti angka 0 dengan string kosong (Clean look)
+    2. Rata tengah (Python level enforcement)
+    3. Mewarnai Angka Total: 
+       - Merah jika NAIK (Total > Prev)
+       - Hijau jika TURUN (Total < Prev)
+    """
+    # 1. Zero Suppression (Logic di luar Styler)
+    # Kita tidak ubah data asli jadi string di awal agar bisa dikomparasi, 
+    # tapi kita format tampilan nanti.
+    
+    def highlight_trend(row):
+        # Default style (no color)
+        styles = [''] * len(row)
+        
+        # Cek apakah kolom ada
+        if col_prev not in row.index or col_total not in row.index:
+            return styles
+            
+        prev_val = row[col_prev]
+        curr_val = row[col_total]
+        
+        # Pastikan numeric
+        try:
+            p = float(prev_val)
+            c = float(curr_val)
+        except:
+            return styles
+
+        # Logic Warna (Problem Dashboard: Naik = Merah, Turun = Hijau)
+        # Cari index kolom total
+        idx_total = row.index.get_loc(col_total)
+        
+        if c > p:
+            styles[idx_total] = 'color: #FF4B4B; font-weight: bold;' # Merah Terang
+        elif c < p:
+            styles[idx_total] = 'color: #00FF00; font-weight: bold;' # Hijau Neon
+            
+        return styles
+
+    # Apply Style
+    styler = df_to_style.style.apply(highlight_trend, axis=1)
+    
+    # Format Properties Global
+    styler = styler.set_properties(**{
+        'text-align': 'center', 
+        'vertical-align': 'middle',
+        'font-size': '11px'
+    })
+    
+    # Format Header khusus
+    styler = styler.set_table_styles([
+        {'selector': 'th', 'props': [('text-align', 'center'), ('background-color', '#262730'), ('color', 'white')]},
+        {'selector': 'td', 'props': [('text-align', 'center')]}
+    ])
+    
+    # Format Angka (0 jadi blank, ribuan pakai koma)
+    styler = styler.format(lambda x: "{:,.0f}".format(x) if (isinstance(x, (int, float)) and x != 0) else "")
+    
+    return styler
 
 # --- 3. LOGIKA MATRIX ---
 def build_executive_summary(df_curr, df_prev, is_complain_mode, prev_month_short, curr_month_short):
@@ -238,7 +314,7 @@ def build_executive_summary(df_curr, df_prev, is_complain_mode, prev_month_short
     cols_order = [col_prev, 'W1', 'W2', 'W3', 'W4', col_total]
     for c in cols_order:
         if c not in matrix_df.columns: matrix_df[c] = 0
-    return matrix_df[cols_order]
+    return matrix_df[cols_order], col_prev, col_total
 
 # --- 4. UI DASHBOARD ---
 df, df_slm = load_data()
@@ -252,8 +328,16 @@ else:
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
-            cats = sorted(df['KATEGORI'].dropna().unique().tolist())
-            sel_cat = st.radio("Kategori:", cats, index=0, horizontal=True, label_visibility="collapsed")
+            # 1. URUTAN KATEGORI DIKUNCI (Fixed Order)
+            fixed_order = ['Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'Cash Out']
+            available_cats = df['KATEGORI'].dropna().unique().tolist()
+            # Filter hanya yang ada di data, tapi pertahankan urutan
+            final_cats = [c for c in fixed_order if c in available_cats]
+            # Tambahkan sisa kategori lain jika ada yang tidak masuk list
+            remaining = [c for c in available_cats if c not in final_cats]
+            final_cats.extend(remaining)
+            
+            sel_cat = st.radio("Kategori:", final_cats, index=0, horizontal=True, label_visibility="collapsed")
             st.caption(f"Kategori: **{sel_cat}**") 
         else:
             sel_cat = "Semua"
@@ -281,8 +365,11 @@ else:
 
     curr_mon_short = get_short_month_name(sel_mon)
     prev_mon_short = get_short_month_name(prev_mon_full) if prev_mon_full else "Prev"
-    col_prev_header = prev_mon_short
-    col_curr_total_header = f"Σ {curr_mon_short.upper()}"
+    
+    # Define Header Names for styling purpose
+    col_prev_head = prev_mon_short
+    col_total_head = f"Σ {curr_mon_short.upper()}"
+    
     is_complain_mode = 'Complain' in sel_cat
     
     st.markdown("---") 
@@ -316,8 +403,10 @@ else:
 
     with col_left:
         st.markdown(f"**🌏 {sel_cat} Overview**")
-        matrix_result = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
-        st.dataframe(style_dataframe(matrix_result), use_container_width=True)
+        matrix_result, c_p, c_t = build_executive_summary(df_main, df_prev, is_complain_mode, prev_mon_short, curr_mon_short)
+        
+        # APPLY ELEGANT STYLING (WARNA & ZERO BLANK)
+        st.dataframe(style_elegant(matrix_result, c_p, c_t), use_container_width=True)
         
         with st.expander(f"📂 Rincian Cabang"):
             if 'CABANG' in df_main.columns and 'WEEK' in df_main.columns:
@@ -331,34 +420,33 @@ else:
                         if c not in pivot_curr.columns: pivot_curr[c] = 0
                     pivot_curr = pivot_curr[desired_cols]
                     
-                    prev_grp = df_prev.groupby('CABANG')[val_col].agg(agg_func).reset_index(name=col_prev_header) if not df_prev.empty else pd.DataFrame(columns=['CABANG', col_prev_header])
+                    prev_grp = df_prev.groupby('CABANG')[val_col].agg(agg_func).reset_index(name=col_prev_head) if not df_prev.empty else pd.DataFrame(columns=['CABANG', col_prev_head])
                     prev_grp = prev_grp.set_index('CABANG')
                     
                     final_cabang = pivot_curr.join(prev_grp, how='left').fillna(0)
-                    final_cabang[col_curr_total_header] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
+                    final_cabang[col_total_head] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
                     
-                    final_cols = [col_prev_header] + desired_cols + [col_curr_total_header]
-                    final_cabang = final_cabang[final_cols].sort_values(col_curr_total_header, ascending=False)
-                    st.dataframe(style_dataframe(final_cabang), use_container_width=True)
+                    final_cols = [col_prev_head] + desired_cols + [col_total_head]
+                    final_cabang = final_cabang[final_cols].sort_values(col_total_head, ascending=False)
+                    
+                    # APPLY ELEGANT STYLING
+                    st.dataframe(style_elegant(final_cabang, col_prev_head, col_total_head), use_container_width=True)
                 except Exception as e:
                     st.error(f"Error pivot: {e}")
 
     with col_right:
-        # HEADER & SORTING
         c_head1, c_head2 = st.columns([2, 1])
         with c_head1:
              st.markdown(f"**🔥 Top 5 Problem Unit (Click to Expand)**")
         with c_head2:
-             sort_options = [col_curr_total_header, 'W1', 'W2', 'W3', 'W4']
+             sort_options = [col_total_head, 'W1', 'W2', 'W3', 'W4']
              sort_by = st.selectbox("Urutkan:", sort_options, index=0, label_visibility="collapsed")
         
-        # --- TOP 5 LOGIC & EXPANDER GENERATION ---
         if 'TID' in df_main.columns and 'LOKASI' in df_main.columns and 'WEEK' in df_main.columns:
             try:
                 val_col = 'JUMLAH_COMPLAIN' if is_complain_mode else 'TID'
                 agg_func = 'sum' if is_complain_mode else 'count'
                 
-                # Prep Data
                 grouped_df = df_main.groupby(['TID', 'LOKASI', 'WEEK'])[val_col].agg(agg_func).reset_index(name='VAL')
                 pivot_top5 = grouped_df.pivot_table(index=['TID', 'LOKASI'], columns='WEEK', values='VAL', aggfunc='sum', fill_value=0)
                 
@@ -367,35 +455,36 @@ else:
                     if c not in pivot_top5.columns: pivot_top5[c] = 0
                 pivot_top5 = pivot_top5[desired_cols]
                 
-                prev_grp_top5 = df_prev.groupby(['TID', 'LOKASI'])[val_col].agg(agg_func).reset_index(name=col_prev_header) if not df_prev.empty else pd.DataFrame(columns=['TID', 'LOKASI', col_prev_header])
+                prev_grp_top5 = df_prev.groupby(['TID', 'LOKASI'])[val_col].agg(agg_func).reset_index(name=col_prev_head) if not df_prev.empty else pd.DataFrame(columns=['TID', 'LOKASI', col_prev_head])
                 prev_grp_top5 = prev_grp_top5.set_index(['TID', 'LOKASI'])
                 
                 final_top5 = pivot_top5.join(prev_grp_top5, how='left').fillna(0)
-                final_top5[col_curr_total_header] = final_top5[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
-                final_cols_top = [col_prev_header] + desired_cols + [col_curr_total_header]
+                final_top5[col_total_head] = final_top5[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
+                final_cols_top = [col_prev_head] + desired_cols + [col_total_head]
                 final_top5 = final_top5[final_cols_top]
                 
                 # Sort Top 5
                 top5_final = final_top5.sort_values(sort_by, ascending=False).head(5)
                 
-                # --- GENERATE EXPANDERS (SLM LOG) ---
                 if top5_final.empty:
                     st.info("Tidak ada data unit problem.")
                 else:
-                    # Loop melalui Top 5
                     for idx, row in top5_final.iterrows():
                         tid_val = idx[0]
                         lokasi_val = idx[1]
-                        total_val = int(row[col_curr_total_header])
+                        total_val = int(row[col_total_head])
                         curr_mon_code = curr_mon_short.upper()
                         
-                        # Label Expander: "TID: 81027 | 16x (DEC) | LOKASI..."
-                        label = f"TID: {tid_val} | {total_val}x ({curr_mon_code}) | {lokasi_val}"
+                        # Label Expander dengan Logic Warna di Icon (Visual Hack dengan Emoji)
+                        # Kita tidak bisa warnai teks expander secara dinamis mudah, jadi pakai emoji
+                        prev_val_row = row[col_prev_head]
+                        trend_emoji = "🔴" if total_val > prev_val_row else "🟢" if total_val < prev_val_row else "⚪"
+                        
+                        label = f"{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {lokasi_val}"
                         
                         with st.expander(label):
-                            # Detail Statistik Kecil di dalam expander
                             cols_detail = st.columns(5)
-                            cols_detail[0].caption(f"{col_prev_header}: {int(row[col_prev_header])}")
+                            cols_detail[0].caption(f"{col_prev_head}: {int(prev_val_row)}")
                             cols_detail[1].caption(f"W1: {int(row['W1'])}")
                             cols_detail[2].caption(f"W2: {int(row['W2'])}")
                             cols_detail[3].caption(f"W3: {int(row['W3'])}")
@@ -403,15 +492,13 @@ else:
                             
                             st.divider()
                             
-                            # Tampilkan Data SLM Visit Log jika ada
                             if not df_slm.empty and 'TID' in df_slm.columns:
                                 slm_hist = df_slm[df_slm['TID'] == str(tid_val)]
-                                
                                 if not slm_hist.empty:
                                     st.markdown("**Riwayat Kunjungan SLM:**")
-                                    # Tampilkan tabel simple: Tanggal & Action
                                     display_slm = slm_hist[['TGL_VISIT', 'ACTION']].reset_index(drop=True)
-                                    st.table(display_slm)
+                                    # Pakai Styler juga untuk SLM biar rapi
+                                    st.dataframe(display_slm.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
                                 else:
                                     st.caption("Belum ada data kunjungan SLM di log.")
                             else:
