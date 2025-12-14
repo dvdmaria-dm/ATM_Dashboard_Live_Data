@@ -4,23 +4,31 @@ import plotly.express as px
 import gspread
 import sys
 import re
+import streamlit.components.v1 as components
 
 # --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
+st.set_page_config(layout='wide', page_title="ATM Performance Monitoring", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "One-Screen" Theme - V90 Balanced)
+# Styling CSS (The "Monitoring Hub" Theme - V91)
 st.markdown("""
 <style>
-    /* 1. LAYOUTING EKSTREM (SANGAT RAPAT AGAR FIT 1 LAYAR) */
+    /* 1. LAYOUTING EKSTREM (SANGAT RAPAT) */
     .block-container {
-        padding-top: 0.5rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 1rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
     }
     
-    /* TYPOGRAPHY */
-    h1 { font-size: 1.3rem !important; margin-bottom: 0rem !important; margin-top: 0rem !important;}
+    /* TYPOGRAPHY JUDUL UTAMA (H1) - DIBESARKAN */
+    h1 { 
+        font-size: 2.2rem !important; /* Lebih Besar */
+        font-weight: 800 !important; /* Lebih Tebal */
+        margin-bottom: 0rem !important; 
+        margin-top: 0rem !important;
+        color: #FFFFFF !important; /* Putih Bersih */
+        letter-spacing: 1px;
+    }
     h2 { font-size: 1.1rem !important; margin-bottom: 0px !important;}
     h3 { font-size: 0.9rem !important; margin-bottom: 2px !important; margin-top: 2px !important;}
     
@@ -37,31 +45,29 @@ st.markdown("""
         padding-top: 2px !important;
         padding-bottom: 2px !important;
     }
-    /* Kecuali Kolom Pertama (Index) Rata Kiri */
     [data-testid="stDataFrame"] thead tr th:first-child,
     [data-testid="stDataFrame"] tbody th {
         text-align: left !important;
     }
 
-    /* --- 3. BASE DESAIN TOMBOL KATEGORI (NEUTRAL) --- */
-    /* Kita kembalikan border ke warna standar (Abu-abu) agar tidak mencolok */
+    /* --- 3. DESAIN TOMBOL KATEGORI (ELEGANT) --- */
     div[role="radiogroup"] > label {
         font-size: 12px !important;
         font-weight: bold !important;
         background-color: #1E1E1E;
         padding: 6px 12px; 
         border-radius: 8px;
-        border: 1px solid #444; /* KEMBALI KE ABU-ABU */
+        border: 1px solid #444; 
         margin-right: 4px;
         transition: all 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     div[role="radiogroup"] > label:hover {
-        border-color: #888; /* Hover sedikit lebih terang */
+        border-color: #888; 
         transform: translateY(-1px);
     }
     
-    /* --- 4. DESAIN "ALIVE" CARD --- */
+    /* --- 4. DESAIN CARD --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
         border-radius: 8px; 
@@ -70,7 +76,6 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         transition: all 0.3s ease;
     }
-    
     [data-testid="stDataFrame"]:hover, .stPlotlyChart:hover {
         border-color: #555;
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
@@ -219,6 +224,7 @@ def style_elegant(df_to_style, col_prev, col_total):
         except:
             return styles
         idx_total = row.index.get_loc(col_total)
+        # LOGIKA ADAPTIF: Merah jika > Prev, Hijau jika < Prev
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
         elif c < p:
@@ -279,7 +285,68 @@ df, df_slm = load_data()
 if df.empty:
     st.warning("Data Master belum tersedia.")
 else:
-    st.markdown("### 🇮🇩 ATM Executive Dashboard")
+    # --- HEADER SECTION (SPLIT COLUMNS) ---
+    c_title, c_clock = st.columns([3, 1]) # Kiri Lebar, Kanan Sempit
+    
+    with c_title:
+        st.markdown("<h1>ATM Performance Monitoring</h1>", unsafe_allow_html=True)
+        
+    with c_clock:
+        # JAM DIGITAL REALTIME (JAVASCRIPT)
+        # Style dibuat transparan agar menyatu dengan background dashboard
+        components.html(
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                body { 
+                    margin: 0; padding: 0; 
+                    background-color: transparent; 
+                    color: #BBBBBB; 
+                    font-family: 'Source Sans Pro', sans-serif; 
+                    text-align: right; 
+                    font-size: 13px; 
+                    font-weight: 600;
+                    display: flex;
+                    justify-content: flex-end;
+                    align-items: center;
+                    height: 100vh;
+                }
+            </style>
+            </head>
+            <body>
+                <div id="clock"></div>
+                <script>
+                function updateTime() {
+                    var now = new Date();
+                    var options = { 
+                        timeZone: 'Asia/Jakarta', 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit',
+                        hour12: false
+                    };
+                    var formatter = new Intl.DateTimeFormat('id-ID', options);
+                    // Format: Senin, 15 Desember 2025 pukul 13.00.00
+                    // Kita rapikan sedikit stringnya
+                    var timeString = formatter.format(now);
+                    timeString = timeString.replace("pukul ", "") + " WIB";
+                    
+                    document.getElementById('clock').innerHTML = timeString;
+                }
+                setInterval(updateTime, 1000);
+                updateTime();
+                </script>
+            </body>
+            </html>
+            """,
+            height=40 # Tinggi cukup untuk 1 baris teks
+        )
     
     # -------------------------------------------------------------------------
     # LOGIC UTAMA: HITUNG BADGE WARNA
@@ -307,14 +374,12 @@ else:
     dynamic_css = [] 
     
     for idx, c in enumerate(final_cats_raw):
-        # Hitung Curr
         df_c_curr = df_mon_curr[df_mon_curr['KATEGORI'] == c]
         if 'Complain' in c: 
             count_curr = df_c_curr['JUMLAH_COMPLAIN'].sum() if 'JUMLAH_COMPLAIN' in df_c_curr.columns else 0
         else: 
             count_curr = len(df_c_curr)
             
-        # Hitung Prev
         count_prev = 0
         has_prev = False
         if not df_mon_prev.empty:
@@ -325,9 +390,7 @@ else:
                 count_prev = len(df_c_prev)
             has_prev = True
             
-        # Tentukan Warna Text (Tanpa Border Neon)
         trend_str = ""
-        # Default Warna Teks (Putih/Abu)
         text_color = "#E0E0E0" 
         
         if has_prev:
@@ -335,10 +398,10 @@ else:
                 pct_change = ((count_curr - count_prev) / count_prev) * 100
                 if pct_change > 0:
                     trend_str = f"| ▲ +{int(pct_change)}%" 
-                    text_color = "#FF4B4B" # Merah (Naik)
+                    text_color = "#FF4B4B" 
                 elif pct_change < 0:
                     trend_str = f"| ▼ {int(pct_change)}%"
-                    text_color = "#00FF00" # Hijau (Turun)
+                    text_color = "#00FF00" 
                 else:
                     trend_str = "| - 0%"
             elif count_curr > 0:
@@ -349,8 +412,6 @@ else:
         cat_labels.append(label)
         cat_map[label] = c
         
-        # --- CSS INJECTION (SUBTLE TEXT ONLY) ---
-        # Kita HAPUS border-color injection. Hanya mainkan warna teks.
         rule = f"""
             div[role="radiogroup"] > label:nth-of-type({idx+1}) {{
                 color: {text_color} !important;
@@ -361,7 +422,6 @@ else:
         """
         dynamic_css.append(rule)
 
-    # Inject Dynamic CSS
     st.markdown(f"<style>{''.join(dynamic_css)}</style>", unsafe_allow_html=True)
 
     with col_f1:
