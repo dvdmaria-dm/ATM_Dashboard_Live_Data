@@ -5,11 +5,12 @@ import gspread
 import sys
 import re
 import streamlit.components.v1 as components
+from datetime import datetime
 
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Performance Monitoring", initial_sidebar_state="collapsed")
 
-# Styling CSS (The "Monitoring Hub" Theme - V91)
+# Styling CSS (The "Monitoring Hub" Theme - V92)
 st.markdown("""
 <style>
     /* 1. LAYOUTING EKSTREM (SANGAT RAPAT) */
@@ -20,13 +21,13 @@ st.markdown("""
         padding-right: 1.5rem !important;
     }
     
-    /* TYPOGRAPHY JUDUL UTAMA (H1) - DIBESARKAN */
+    /* TYPOGRAPHY JUDUL UTAMA (H1) */
     h1 { 
-        font-size: 2.2rem !important; /* Lebih Besar */
-        font-weight: 800 !important; /* Lebih Tebal */
+        font-size: 2.2rem !important; 
+        font-weight: 800 !important; 
         margin-bottom: 0rem !important; 
         margin-top: 0rem !important;
-        color: #FFFFFF !important; /* Putih Bersih */
+        color: #FFFFFF !important; 
         letter-spacing: 1px;
     }
     h2 { font-size: 1.1rem !important; margin-bottom: 0px !important;}
@@ -286,14 +287,12 @@ if df.empty:
     st.warning("Data Master belum tersedia.")
 else:
     # --- HEADER SECTION (SPLIT COLUMNS) ---
-    c_title, c_clock = st.columns([3, 1]) # Kiri Lebar, Kanan Sempit
+    c_title, c_clock = st.columns([3, 1]) 
     
     with c_title:
         st.markdown("<h1>ATM Performance Monitoring</h1>", unsafe_allow_html=True)
         
     with c_clock:
-        # JAM DIGITAL REALTIME (JAVASCRIPT)
-        # Style dibuat transparan agar menyatu dengan background dashboard
         components.html(
             """
             <!DOCTYPE html>
@@ -332,11 +331,8 @@ else:
                         hour12: false
                     };
                     var formatter = new Intl.DateTimeFormat('id-ID', options);
-                    // Format: Senin, 15 Desember 2025 pukul 13.00.00
-                    // Kita rapikan sedikit stringnya
                     var timeString = formatter.format(now);
                     timeString = timeString.replace("pukul ", "") + " WIB";
-                    
                     document.getElementById('clock').innerHTML = timeString;
                 }
                 setInterval(updateTime, 1000);
@@ -345,7 +341,7 @@ else:
             </body>
             </html>
             """,
-            height=40 # Tinggi cukup untuk 1 baris teks
+            height=40
         )
     
     # -------------------------------------------------------------------------
@@ -527,7 +523,7 @@ else:
     with col_right:
         c_head1, c_head2 = st.columns([2, 1])
         with c_head1:
-             st.markdown(f"**🔥 Top 5 Problem Unit**")
+             st.markdown(f"**🔥 Top 10 Problem Unit (Diagnosis)**") # Judul Updated
         with c_head2:
              sort_options = [col_total_head, 'W1', 'W2', 'W3', 'W4']
              sort_by = st.selectbox("Urutkan:", sort_options, index=0, label_visibility="collapsed")
@@ -553,7 +549,8 @@ else:
                 final_cols_top = [col_prev_head] + desired_cols + [col_total_head]
                 final_top5 = final_top5[final_cols_top]
                 
-                top5_final = final_top5.sort_values(sort_by, ascending=False).head(5)
+                # --- TOP 10 LOGIC (UPDATED V92) ---
+                top5_final = final_top5.sort_values(sort_by, ascending=False).head(10) # Change to 10
                 
                 if sort_by in ['W1', 'W2', 'W3', 'W4']:
                     top5_final = top5_final[top5_final[sort_by] > 0]
@@ -561,15 +558,40 @@ else:
                 if top5_final.empty:
                     st.info(f"Belum ada unit problem yang tercatat di {sort_by}.")
                 else:
+                    today_dt = pd.Timestamp.now()
+                    
                     for idx, row in top5_final.iterrows():
                         tid_val = idx[0]
                         lokasi_val = idx[1]
                         total_val = int(row[col_total_head])
                         curr_mon_code = curr_mon_short.upper()
                         
+                        # --- HITUNG RECENCY (DIAGNOSIS) ---
+                        # Cari tanggal terakhir kejadian di data asli untuk TID ini
+                        try:
+                            mask_tid = df_main['TID'] == str(tid_val)
+                            if mask_tid.any():
+                                last_date = df_main[mask_tid]['TANGGAL'].max()
+                                if pd.notna(last_date):
+                                    days_diff = (today_dt - last_date).days
+                                    if days_diff == 0:
+                                        time_str = "⏱️ Hari ini"
+                                    elif days_diff == 1:
+                                        time_str = "⏱️ Kemarin"
+                                    else:
+                                        time_str = f"⏱️ {days_diff} hari lalu"
+                                else:
+                                    time_str = "⏱️ -"
+                            else:
+                                time_str = "⏱️ -"
+                        except:
+                            time_str = "⏱️ ?"
+                        
                         prev_val_row = row[col_prev_head]
                         trend_emoji = "🔴" if total_val > prev_val_row else "🟢" if total_val < prev_val_row else "⚪"
-                        label = f"{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {lokasi_val}"
+                        
+                        # LABEL BARU
+                        label = f"{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {time_str} | {lokasi_val}"
                         
                         with st.expander(label):
                             cols_detail = st.columns(5)
