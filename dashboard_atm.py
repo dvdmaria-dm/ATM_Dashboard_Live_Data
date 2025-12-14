@@ -8,67 +8,59 @@ import re
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(layout='wide', page_title="ATM Executive Dashboard", initial_sidebar_state="collapsed")
 
-# Styling CSS (Alive Theme & Right Alignment Fix)
+# Styling CSS (The "Alive" Theme & Right Alignment Fix V2)
 st.markdown("""
 <style>
-    /* 1. LAYOUTING LEBIH RAPAT (MENGURANGI SPACE ATAS) */
+    /* 1. LAYOUTING COMPACT */
     .block-container {
-        padding-top: 1rem !important; /* Ditarik ke atas */
+        padding-top: 1rem !important;
         padding-bottom: 2rem !important;
         padding-left: 1.5rem !important;
         padding-right: 1.5rem !important;
     }
     
-    /* Header Judul Dashboard */
+    /* TYPOGRAPHY */
     h1 { font-size: 1.4rem !important; margin-bottom: 0.2rem !important; margin-top: 0rem !important;}
     h2 { font-size: 1.2rem !important; margin-bottom: 0px !important;}
-    
-    /* Judul Section (Tren, Top 5, dll) */
     h3 { font-size: 1rem !important; margin-bottom: 5px !important; margin-top: 5px !important;}
-    p { margin-bottom: 5px !important; } 
-
-    /* FONT GLOBAL */
+    
     html, body, [class*="st-emotion-"] { 
         font-size: 11px; 
     }
 
-    /* HAPUS ELEMEN PENGGANGGU */
     #MainMenu, footer, header {visibility: hidden;}
     .st-emotion-cache-1j8u2d7 {visibility: hidden;} 
     
-    /* --- 2. RATA KANAN (RIGHT ALIGN) AGAR SEJAJAR ANGKA --- */
-    /* Target Header Tabel: Rata Kanan */
-    [data-testid="stDataFrame"] th {
-        text-align: right !important;
-        display: flex !important;
-        justify-content: flex-end !important; /* Paksa konten header ke kanan */
-        align-items: center !important;
-        background-color: #262730 !important;
-        color: white !important;
-        padding-right: 10px !important; /* Beri napas sedikit dari pinggir */
-    }
-    /* Target Isi Tabel (Cell): Rata Kanan */
+    /* --- 2. LOGIKA RATA KANAN (RIGHT ALIGN) YANG LEBIH AGRESIF --- */
+    
+    /* Target CELL DATA (td) */
     [data-testid="stDataFrame"] td {
         text-align: right !important;
-        padding-right: 10px !important;
-    }
-    /* Target Container Text di dalam Cell */
-    [data-testid="stDataFrame"] div[data-testid="stVerticalBlock"] > div {
-        display: flex;
-        justify-content: flex-end; /* Flex End = Kanan */
-        align-items: center;
     }
     
-    /* KECUALI KOLOM PERTAMA (Index/Nama Cabang/TID) -> TETAP RATA KIRI */
+    /* Target HEADER (th) - Ini kuncinya! */
+    [data-testid="stDataFrame"] th {
+        text-align: right !important;
+    }
+    
+    /* Target KONTAINER FLEX di dalam Header (Streamlit membungkus teks header di sini) */
+    [data-testid="stDataFrame"] th div {
+        justify-content: flex-end !important; /* Paksa konten flex ke kanan */
+        text-align: right !important;
+        display: flex !important;
+    }
+    
+    /* KECUALI KOLOM PERTAMA (Index/Nama Cabang/TID) -> KEMBALIKAN KE KIRI */
+    [data-testid="stDataFrame"] thead tr th:first-child,
+    [data-testid="stDataFrame"] thead tr th:first-child div,
     [data-testid="stDataFrame"] tbody th,
-    [data-testid="stDataFrame"] tbody th div,
-    [data-testid="stDataFrame"] thead th:first-child {
+    [data-testid="stDataFrame"] tbody th div {
         text-align: left !important;
         justify-content: flex-start !important;
         padding-left: 10px !important;
     }
 
-    /* --- 3. DESAIN TOMBOL KATEGORI "HIDUP" --- */
+    /* --- 3. DESAIN INTERAKTIF --- */
     div[role="radiogroup"] > label {
         font-size: 13px !important;
         font-weight: bold !important;
@@ -86,7 +78,6 @@ st.markdown("""
         transform: translateY(-1px);
     }
 
-    /* --- 4. DESAIN "ALIVE" UNTUK TABEL & GRAFIK --- */
     [data-testid="stDataFrame"], .stPlotlyChart {
         border: 1px solid #333;
         border-radius: 10px; 
@@ -101,7 +92,6 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
     }
 
-    /* Styling Expander Top 5 */
     .streamlit-expanderHeader {
         font-size: 12px !important;
         font-weight: bold !important;
@@ -158,8 +148,6 @@ except Exception as e:
 def load_data():
     try:
         sh = gc.open_by_url(SHEET_URL)
-        
-        # --- LOAD DATA MASTER ---
         ws = sh.worksheet(SHEET_MAIN)
         all_values = ws.get_all_values()
         
@@ -169,7 +157,6 @@ def load_data():
         rows = all_values[1:]
         df = pd.DataFrame(rows, columns=headers)
         
-        # Cleaning Master
         df = df.loc[:, df.columns != '']
         df.columns = df.columns.str.strip().str.upper()
         df = df.loc[:, ~df.columns.duplicated()]
@@ -193,7 +180,6 @@ def load_data():
         if 'LOKASI' in df.columns:
             df['LOKASI'] = df['LOKASI'].astype(str)
 
-        # --- LOAD DATA SLM VISIT LOG ---
         try:
             ws_slm = sh.worksheet(SHEET_SLM)
             slm_values = ws_slm.get_all_values()
@@ -219,7 +205,6 @@ def load_data():
         st.error(f"Data Loading Error: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# --- HELPER FUNCTIONS ---
 def get_short_month_name(full_month_str):
     if not full_month_str: return ""
     return full_month_str[:3]
@@ -234,13 +219,12 @@ def get_prev_month_full(curr_month):
     except:
         return None
 
-# --- STYLING ELEGANT FUNCTION (RIGHT ALIGNED) ---
+# --- STYLING ELEGANT FUNCTION (RIGHT ALIGN ENFORCED) ---
 def style_elegant(df_to_style, col_prev, col_total):
     def highlight_trend(row):
         styles = [''] * len(row)
         if col_prev not in row.index or col_total not in row.index:
             return styles
-            
         prev_val = row[col_prev]
         curr_val = row[col_total]
         try:
@@ -248,7 +232,6 @@ def style_elegant(df_to_style, col_prev, col_total):
             c = float(curr_val)
         except:
             return styles
-
         idx_total = row.index.get_loc(col_total)
         if c > p:
             styles[idx_total] = 'color: #FF4B4B; font-weight: bold;'
@@ -258,17 +241,17 @@ def style_elegant(df_to_style, col_prev, col_total):
 
     styler = df_to_style.style.apply(highlight_trend, axis=1)
     
-    # FORCE RIGHT ALIGNMENT (DATA)
+    # FORMAT DATA: Right Align
     styler = styler.set_properties(**{
         'text-align': 'right', 
         'vertical-align': 'middle', 
         'font-size': '11px'
     })
     
-    # HEADER RIGHT, BUT CABANG/TID LEFT (Handled by CSS Mostly, but enforced here too)
+    # FORMAT HEADERS: Right Align (Reinforcement)
     styler = styler.set_table_styles([
-        {'selector': 'th', 'props': [('text-align', 'right'), ('background-color', '#262730'), ('color', 'white')]},
-        {'selector': 'td', 'props': [('text-align', 'right')]}
+        {'selector': 'th', 'props': [('text-align', 'right !important'), ('background-color', '#262730'), ('color', 'white')]},
+        {'selector': 'td', 'props': [('text-align', 'right !important')]}
     ])
     styler = styler.format(lambda x: "{:,.0f}".format(x) if (isinstance(x, (int, float)) and x != 0) else "")
     return styler
@@ -316,7 +299,6 @@ if df.empty:
 else:
     st.markdown("### 🇮🇩 ATM Executive Dashboard")
     
-    # FILTER (Compact & Close)
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1:
         if 'KATEGORI' in df.columns:
@@ -325,9 +307,7 @@ else:
             final_cats = [c for c in fixed_order if c in available_cats]
             remaining = [c for c in available_cats if c not in final_cats]
             final_cats.extend(remaining)
-            
             sel_cat = st.radio("Kategori:", final_cats, index=0, horizontal=True, label_visibility="collapsed")
-            # Hilangkan Caption 'Kategori:' untuk hemat tempat jika sudah jelas
         else:
             sel_cat = "Semua"
     with col_f2:
@@ -337,7 +317,6 @@ else:
         else:
             sel_mon = "Semua"
 
-    # DATA FILTERING
     df_cat = df.copy()
     if sel_cat != "Semua" and 'KATEGORI' in df_cat.columns:
         df_cat = df_cat[df_cat['KATEGORI'] == sel_cat]
@@ -357,11 +336,7 @@ else:
     col_total_head = f"Σ {curr_mon_short.upper()}"
     is_complain_mode = 'Complain' in sel_cat
     
-    # HAPUS garis pembatas st.markdown("---") untuk menaikkan posisi grafik
-
-    # =========================================================================
-    # 1. GRAFIK TREN (POSISI LEBIH NAIK)
-    # =========================================================================
+    # GRAFIK TREN (LEBIH NAIK)
     st.markdown(f"**📈 Tren Harian (Ticket Volume - {sel_mon})**")
     if 'TANGGAL' in df_main.columns:
         if is_complain_mode:
@@ -376,7 +351,6 @@ else:
             daily['TANGGAL_STR'] = daily['TANGGAL'].dt.strftime('%d-%m-%Y')
             
             fig = px.area(daily, x='TANGGAL_STR', y=y_val, markers=True, text=y_val, template="plotly_dark")
-            
             fig.update_traces(
                 line_color='#FF4B4B', 
                 line_width=3,
@@ -385,7 +359,6 @@ else:
                 fill='tozeroy', 
                 fillcolor='rgba(255, 75, 75, 0.1)'
             )
-            
             fig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
@@ -400,7 +373,7 @@ else:
         else:
             st.info("Data harian kosong.")
 
-    # 2. DETAIL & SLM LOG
+    # DETAIL & SLM LOG
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -425,10 +398,8 @@ else:
                     
                     final_cabang = pivot_curr.join(prev_grp, how='left').fillna(0)
                     final_cabang[col_total_head] = final_cabang[['W1', 'W2', 'W3', 'W4']].sum(axis=1)
-                    
                     final_cols = [col_prev_head] + desired_cols + [col_total_head]
                     final_cabang = final_cabang[final_cols].sort_values(col_total_head, ascending=False)
-                    
                     st.dataframe(style_elegant(final_cabang, col_prev_head, col_total_head), use_container_width=True)
                 except Exception as e:
                     st.error(f"Error pivot: {e}")
@@ -462,7 +433,6 @@ else:
                 final_cols_top = [col_prev_head] + desired_cols + [col_total_head]
                 final_top5 = final_top5[final_cols_top]
                 
-                # Logic V83: Sort & Filter
                 top5_final = final_top5.sort_values(sort_by, ascending=False).head(5)
                 
                 if sort_by in ['W1', 'W2', 'W3', 'W4']:
@@ -479,7 +449,6 @@ else:
                         
                         prev_val_row = row[col_prev_head]
                         trend_emoji = "🔴" if total_val > prev_val_row else "🟢" if total_val < prev_val_row else "⚪"
-                        
                         label = f"{trend_emoji} TID: {tid_val} | {total_val}x ({curr_mon_code}) | {lokasi_val}"
                         
                         with st.expander(label):
@@ -497,7 +466,6 @@ else:
                                 if not slm_hist.empty:
                                     st.markdown("**Riwayat Kunjungan SLM:**")
                                     display_slm = slm_hist[['TGL_VISIT', 'ACTION']].reset_index(drop=True)
-                                    # SLM Table tetap Left Align biar enak baca teks
                                     st.dataframe(display_slm.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
                                 else:
                                     st.caption("Belum ada data kunjungan SLM di log.")
