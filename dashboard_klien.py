@@ -829,55 +829,93 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - AUTO CLEAN)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        def get_sp_slice(r_start, r_end, c_end):
-            if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end and df_sp_raw.shape[1] >= c_end:
-                subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
-                headers = subset.iloc[0].astype(str).tolist()
-                seen_counts = {}; final_cols = []
-                for col in headers:
-                    col = col.strip(); col = "Info" if col == "" else col
-                    if col in seen_counts: seen_counts[col] += 1; col = f"{col}_{seen_counts[col]}"
-                    else: seen_counts[col] = 0
-                    final_cols.append(col)
-                subset.columns = final_cols; return clean_zeros(subset[1:])
+        
+        # Fungsi Helper Cerdas: Ambil Header Asli & Buang Baris Kosong
+        def get_smart_data(r_header_idx, r_end_idx, c_end_idx):
+            try:
+                # Kita ambil range LEBIH LEBAR (buffer) biar Kupang tidak ketinggalan
+                # r_header_idx = Index Baris Header (Excel Baris 12 = Index 11)
+                # r_end_idx    = Index Baris Akhir (Kita tembak lebih jauh dikit biar aman)
+                
+                if not df_sp_raw.empty and df_sp_raw.shape[0] > r_header_idx:
+                    # Ambil potongan data mentah
+                    subset = df_sp_raw.iloc[r_header_idx:r_end_idx, 0:c_end_idx]
+                    
+                    # 1. HEADER PERSIS DARI SUMBER
+                    # Ambil baris pertama potongan sebagai header
+                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    
+                    # --- SAFETY NET DUPLIKAT ---
+                    # (Hanya aktif jika abang lupa bikin nama unik di Excel, biar gak crash)
+                    seen = {}
+                    final_headers = []
+                    for h in raw_headers:
+                        if h in seen:
+                            seen[h] += 1
+                            final_headers.append(f"{h}_{seen[h]}") # Terpaksa tambah angka kalau kembar
+                        else:
+                            seen[h] = 0
+                            final_headers.append(h) # Kalau unik, AMBIL PERSIS
+                    
+                    subset.columns = final_headers
+                    
+                    # 2. BUANG BARIS HEADER & BARIS KOSONG
+                    data_only = subset[1:].copy()
+                    
+                    # Filter Canggih: Hapus baris yang kolom pertamanya (CABANG) kosong/nan
+                    # Ini akan otomatis membuang "baris kosong 1" di bawah header itu.
+                    first_col = data_only.columns[0]
+                    data_only = data_only[
+                        (data_only[first_col].str.strip() != '') & 
+                        (data_only[first_col].str.lower() != 'nan') &
+                        (data_only[first_col].str.lower() != 'none')
+                    ]
+                    
+                    return clean_zeros(data_only)
+            except: pass
             return pd.DataFrame()
+
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
-        with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
+        
+        with tab1: 
+            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            st.dataframe(get_smart_data(0, 11, 22), use_container_width=True, hide_index=True)
+            
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # LOGIKA BARU: HANYA FORMAT PERSEN JIKA NILAINYA KECIL (<= 1.5)
-            # Ini mencegah angka "29" berubah jadi "2900%"
-            df_kaset = get_sp_slice(11, 22, 12)
+            
+            # --- LOGIKA JARIMG LEBAR ---
+            # Excel Header: Baris 12 (Index 11)
+            # Excel Data: Sampai Baris 25 (Index 25) -> Kita lebihkan biar Kupang ketangkap
+            # Kolom: A sampai L (12 Kolom)
+            
+            df_kaset = get_smart_data(11, 26, 12) 
             
             if not df_kaset.empty:
-                # 1. Bersihkan Header yang "Info", "Info_1" agar lebih enak dilihat (Opsional)
-                # Kalau mau header asli dari Excel, pastikan baris ke-12 di Google Sheets tidak kosong.
-                
+                # FORMAT PERSEN PINTAR
                 for col in df_kaset.columns:
-                    # Lewati kolom pertama (biasanya Nama Cabang)
-                    if col == df_kaset.columns[0]: continue
-                    
+                    if "CABANG" in col.upper() or "KOTA" in col.upper(): continue
                     try:
-                        # Coba ubah ke angka
-                        s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
+                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
+                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
                         
-                        # FUNGSI PINTAR:
-                        # Jika angkanya <= 1.5 (misal 0.99), jadikan persen (99%).
-                        # Jika angkanya > 1.5 (misal 29), BIARKAN ANGKA BIASA.
-                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else ""))
-                    except: 
-                        pass
-            
-            st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            
+                        df_kaset[col] = s_numeric.apply(
+                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                        )
+                    except: pass
+                
+                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            else:
+                st.info("Data Stock Kaset tidak ditemukan. Cek range di script.")
+
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(24, 28, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(31, 36, 7), use_container_width=True, hide_index=True)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(24, 30, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(31, 38, 7), use_container_width=True, hide_index=True)
 
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1211,6 +1249,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
