@@ -875,12 +875,16 @@ elif st.session_state['app_mode'] == 'main':
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                # TARGET A23:F27 (Excel 23 = Index 22)
-                df_rsk = make_unique_df(df_sp_raw.iloc[22:27, 0:6])
+                # TARGET: A24:F27
+                # Baris 24 (Excel) = Index 23
+                # Baris 27 (Excel) = Index 27 (Batas akhir)
+                # Kolom A:F = Index 0:6
+                df_rsk = make_unique_df(df_sp_raw.iloc[23:27, 0:6])
                 st.dataframe(df_rsk, use_container_width=True, hide_index=True)
+                
             with c2:
                 st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                # Target Baris 32 (Excel) = Index 31
+                # PM Kaset tetap di Index 31 (Baris 32 Excel)
                 df_pm = make_unique_df(df_sp_raw.iloc[31:39, 0:7])
                 st.dataframe(df_pm, use_container_width=True, hide_index=True)
 
@@ -1217,6 +1221,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
