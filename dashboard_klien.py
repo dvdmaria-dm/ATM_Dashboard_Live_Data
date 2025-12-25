@@ -829,20 +829,25 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (REVISI HEADER GANDA)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (UPDATED RANGE A12:L21)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper Sederhana
-        def get_simple_slice(r_start, r_end, c_end):
+        # Fungsi Helper untuk mengambil potongan data bebas
+        def get_exact_slice(r_start_idx, r_end_idx, c_end_idx):
             try:
-                if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end:
-                    subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
-                    # Ambil baris pertama sebagai header
-                    headers = subset.iloc[0].astype(str).tolist()
+                # Pastikan data ada dan cukup barisnya
+                if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end_idx:
+                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
+                    
+                    # Baris pertama dari potongan adalah Header
+                    headers = subset.iloc[0].astype(str).str.strip()
                     subset.columns = headers
-                    return clean_zeros(subset[1:])
+                    
+                    # Ambil data setelah header
+                    data_only = subset[1:]
+                    return clean_zeros(data_only)
             except: pass
             return pd.DataFrame()
 
@@ -850,83 +855,47 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_simple_slice(0, 10, 22), use_container_width=True, hide_index=True)
+            # Sparepart biasanya di atas (A1:V10) -> Index 0 s/d 10
+            st.dataframe(get_exact_slice(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- LOGIKA KHUSUS HEADER BERTINGKAT (FIXED) ---
-            # Mengambil range baris 11 s/d 22 (A12:L22 di Excel)
-            # Baris 11 (Index 0) = Header Bulan (NOV, W1 DEC...)
-            # Baris 12 (Index 1) = Header Metric (JML TID, GOOD CURRENT...)
-            # Baris 13+ (Index 2+) = Data
+            # --- LOGIKA KHUSUS A12:L21 ---
+            # Header di Baris 12 Excel (Index 11 Python)
+            # Data sampai Baris 21 Excel (Index 21 Python untuk batas potong)
+            # Kolom A sampai L (12 Kolom)
             
-            try:
-                # 1. Ambil Raw Data
-                slice_kaset = df_sp_raw.iloc[11:22, 0:12] # Ambil sampai kolom L (index 12)
+            df_kaset = get_exact_slice(11, 21, 12) 
+            
+            if not df_kaset.empty:
+                # FORMAT PERSEN (Logika Pintar)
+                for col in df_kaset.columns:
+                    # Lewati kolom Cabang/Kota
+                    if "CABANG" in col.upper() or "KOTA" in col.upper(): continue
+                    
+                    try:
+                        # Bersihkan simbol % jika sudah ada dari Excel
+                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
+                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
+                        
+                        # Aturan: 
+                        # Angka <= 1.5 jadi Persen (contoh 0.99 -> 99%)
+                        # Angka > 1.5 biarkan Bulat (contoh 29 -> 29)
+                        df_kaset[col] = s_numeric.apply(
+                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                        )
+                    except: pass
                 
-                if not slice_kaset.empty:
-                    # 2. Ambil Dua Baris Header
-                    row_month = slice_kaset.iloc[0].astype(str).replace(['nan', 'None', ''], pd.NA).tolist()
-                    row_metric = slice_kaset.iloc[1].astype(str).replace(['nan', 'None', ''], '').tolist()
-                    
-                    # 3. Gabungkan Header (Jahit Bulan + Metric)
-                    final_headers = []
-                    last_month = ""
-                    
-                    for i, (m, met) in enumerate(zip(row_month, row_metric)):
-                        if i == 0: # Kolom Pertama (Cabang)
-                            final_headers.append("CABANG")
-                            continue
-                            
-                        # Logika "Carry Forward" Bulan (karena merge cell)
-                        if pd.notna(m): last_month = m
-                        
-                        # Buat nama kolom unik
-                        # Contoh: "NOV JML TID", "NOV GOOD CURRENT", "W1 DEC GOOD REJECT"
-                        col_name = f"{last_month} {met}".strip()
-                        final_headers.append(col_name)
-                    
-                    # 4. Pasang Header Baru ke Data
-                    df_kaset_clean = slice_kaset.iloc[2:].copy() # Ambil data mulai baris ke-3
-                    
-                    # Pastikan jumlah kolom sama
-                    if len(final_headers) == df_kaset_clean.shape[1]:
-                        df_kaset_clean.columns = final_headers
-                    else:
-                        # Fallback jika kolom tidak pas
-                        df_kaset_clean.columns = [f"Col_{i}" for i in range(df_kaset_clean.shape[1])]
-
-                    # 5. FORMAT PERSEN (LOGIKA PINTAR)
-                    for col in df_kaset_clean.columns:
-                        if col == "CABANG": continue
-                        
-                        try:
-                            # Coba ubah ke angka
-                            # Bersihkan karakter aneh dulu
-                            clean_series = df_kaset_clean[col].astype(str).str.replace('%', '').str.strip()
-                            s_numeric = pd.to_numeric(clean_series, errors='coerce')
-                            
-                            # Terapkan logika: 
-                            # Angka <= 1.5 dianggap persen (contoh 0.99 -> 99%)
-                            # Angka > 1.5 dianggap bilangan bulat (contoh 29 -> 29)
-                            df_kaset_clean[col] = s_numeric.apply(
-                                lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                            )
-                        except:
-                            pass
-                            
-                    st.dataframe(df_kaset_clean, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Data Stock Kaset Kosong / Tidak Terbaca.")
-            except Exception as e:
-                st.error(f"Terjadi kesalahan format data Stock Kaset: {e}")
+                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            else:
+                st.info("Data Stock Kaset (A12:L21) tidak ditemukan atau kosong.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_simple_slice(24, 28, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_simple_slice(31, 36, 7), use_container_width=True, hide_index=True)
-
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_exact_slice(24, 28, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_exact_slice(31, 36, 7), use_container_width=True, hide_index=True)
+   
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
     # =========================================================================
@@ -1259,6 +1228,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
