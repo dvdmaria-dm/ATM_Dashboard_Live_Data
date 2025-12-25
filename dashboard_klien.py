@@ -829,25 +829,23 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: Sparepart & Kaset (NAMA MENU DISESUAIKAN)
+    # 1. LAYOUT KHUSUS: Sparepart & Kaset (A12:L21) - VERSI ANTI-ERROR
     # =========================================================================
-    # Nama di bawah ini HARUS SAMA PERSIS dengan yang ada di pilihan Sidebar kau
     if sel_cat == 'Sparepart & Kaset':
-        # Style Tabel agar scannable
+        # Style Header agar scannable
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; color: #1E293B !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper Ambil Data Koordinat
+        # Fungsi Helper Ambil Data (Kaku & Presisi)
         def get_exact_table(start_row, end_row, start_col, end_col):
             try:
-                # Kita pakai df_sp_raw yang sudah dimuat dari sheet 'Sparepart&kaset'
                 if not df_sp_raw.empty:
-                    # Koordinat A12:L21 (Index 11 sampai 21)
+                    # Ambil Baris 12 s/d 21 (Index 11:21) dan Kolom A s/d L (Index 0:12)
                     subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
                     
-                    # Ambil Baris Pertama sebagai Header
+                    # Ambil Baris Pertama potongan sebagai Header
                     headers = subset.iloc[0].astype(str).str.strip().tolist()
                     
-                    # Bersihkan Header Duplicate agar tidak Error
+                    # Beri nama unik agar tidak Duplicate Column Error
                     final_headers = []
                     seen = {}
                     for h in headers:
@@ -859,23 +857,22 @@ elif st.session_state['app_mode'] == 'main':
                             seen[name] = 0
                             final_headers.append(name)
                     
-                    # Buat DataFrame Baru
+                    # Cetak DataFrame Baru
                     res_df = pd.DataFrame(subset.values[1:], columns=final_headers)
                     return clean_zeros(res_df)
-            except Exception as e:
-                return pd.DataFrame()
+            except: pass
             return pd.DataFrame()
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1: 
             st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Koordinat A1:V10
+            # A1:V10 (Index 0:10, 0:22)
             st.dataframe(get_exact_table(0, 10, 0, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # --- EKSEKUSI A12:L21 ---
+            # --- TARGET UTAMA A12:L21 ---
             df_kaset = get_exact_table(11, 21, 0, 12) 
             
             if not df_kaset.empty:
@@ -890,7 +887,7 @@ elif st.session_state['app_mode'] == 'main':
                     except: pass
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Kaset A12:L21 tidak ditemukan. Cek kembali koordinat di Google Sheets.")
+                st.info("Data Kaset di koordinat A12:L21 tidak ditemukan.")
 
         with tab3:
             c1, c2 = st.columns(2)
@@ -903,7 +900,8 @@ elif st.session_state['app_mode'] == 'main':
                 st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
                 st.dataframe(get_exact_table(31, 39, 0, 7), use_container_width=True, hide_index=True)
 
-        # ⛔ BERHENTI DI SINI agar tidak lari ke Error WEEK di baris bawah
+        # ⛔ REM PAKEM (INI YANG PALING PENTING)
+        # Perintah ini akan memaksa Python berhenti di sini dan tidak lanjut ke baris 1050
         st.stop()
     
     # =========================================================================
@@ -1238,6 +1236,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
