@@ -827,89 +827,61 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-    # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (SMART ANCHOR - ANTI GESER)
+   # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FORCE COORDINATE A12:L22)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # FUNGSI PENCARI TABEL OTOMATIS
-        def get_data_by_keyword(keyword_start, keyword_stop_list, col_limit=None):
+        def get_force_data(r_start_idx, r_end_idx, c_end_idx):
             try:
-                if df_sp_raw.empty: return pd.DataFrame()
-
-                start_idx = -1
-                
-                # 1. CARI BARIS HEADER (ANCHOR)
-                # Loop dari baris 0 sampai 50 untuk cari kata kunci (misal: "CABANG")
-                for i in range(min(50, len(df_sp_raw))):
-                    row_val = str(df_sp_raw.iloc[i, 0]).strip().upper()
-                    if keyword_start.upper() in row_val:
-                        start_idx = i
-                        break
-                
-                if start_idx == -1: return pd.DataFrame() # Gak ketemu
-
-                # 2. TENTUKAN HEADER
-                # Ambil baris start_idx sebagai header
-                if col_limit:
-                    subset_raw = df_sp_raw.iloc[start_idx:, :col_limit]
-                else:
-                    subset_raw = df_sp_raw.iloc[start_idx:]
-                
-                headers = subset_raw.iloc[0].astype(str).str.strip().tolist()
-                
-                # Bersihkan Header Duplicate (Jaga-jaga)
-                final_headers = []
-                seen = {}
-                for h in headers:
-                    if h in seen: seen[h]+=1; final_headers.append(f"{h}_{seen[h]}")
-                    else: seen[h]=0; final_headers.append(h)
-                
-                subset_raw.columns = final_headers
-                
-                # 3. AMBIL DATA & CARI BATAS BAWAH
-                data_candidates = subset_raw[1:].copy()
-                valid_rows = []
-                
-                for idx, row in data_candidates.iterrows():
-                    first_cell = str(row.iloc[0]).strip().upper()
+                if not df_sp_raw.empty:
+                    # PAKSA POTONG DI KOORDINAT INI
+                    # r_start_idx = 11 (Excel Baris 12)
+                    # r_end_idx   = 22 (Excel Baris 22 - Kupang Masuk)
+                    # c_end_idx   = 12 (Kolom A s/d L - PAS 12 KOLOM)
                     
-                    # Stop jika ketemu baris kosong atau kata kunci Stop (misal "REKAP")
-                    if first_cell in ['NAN', 'NONE', '']: break
-                    is_stop = False
-                    for stop_word in keyword_stop_list:
-                        if stop_word.upper() in first_cell:
-                            is_stop = True
-                            break
-                    if is_stop: break
+                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
                     
-                    valid_rows.append(row)
-                
-                if not valid_rows: return pd.DataFrame()
-                
-                return clean_zeros(pd.DataFrame(valid_rows))
-
-            except Exception as e:
-                return pd.DataFrame()
+                    # 1. AMBIL HEADER
+                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    
+                    # 2. PENGAMAN NAMA KEMBAR (WAJIB ADA BIAR GAK CRASH)
+                    final_headers = []
+                    seen_counts = {}
+                    
+                    for col in raw_headers:
+                        # Ganti nama kalau kosong
+                        if col.lower() in ['nan', 'none', '']:
+                            col = "Info"
+                        
+                        if col in seen_counts:
+                            seen_counts[col] += 1
+                            final_headers.append(f"{col}_{seen_counts[col]}")
+                        else:
+                            seen_counts[col] = 0
+                            final_headers.append(col)
+                    
+                    subset.columns = final_headers
+                    
+                    # 3. AMBIL DATA
+                    data_only = subset[1:]
+                    return clean_zeros(data_only)
+            except: pass
+            return pd.DataFrame()
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Cari tabel yang dimulai dengan kata "SPAREPART" atau "STOK" (Sesuaikan kolom A di excel sparepart)
-            # Karena Sparepart biasanya paling atas, kita bisa pakai cara lama atau cari "NAMA" / "ITEM"
-            # Asumsi: Tabel Sparepart masih aman di atas. Kita pakai range aman 0-10.
-            st.dataframe(df_sp_raw.iloc[0:10].fillna(""), use_container_width=True, hide_index=True)
+            st.dataframe(get_force_data(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- CARI TABEL YANG DIAWALI KATA "CABANG" ---
-            # Stop kalau ketemu kata "REKAP" atau "MONITORING"
-            # Ambil 12 Kolom (A-L)
-            
-            df_kaset = get_data_by_keyword("CABANG", ["REKAP", "MONITORING", "PM"], col_limit=12)
+            # --- EKSEKUSI PAKSA (FORCE) ---
+            # Kita tidak mencari-cari lagi. Kita langsung tembak lokasinya.
+            df_kaset = get_force_data(11, 22, 12) 
             
             if not df_kaset.empty:
                 for col in df_kaset.columns:
@@ -922,21 +894,15 @@ elif st.session_state['app_mode'] == 'main':
                             lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
                         )
                     except: pass
+                
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Tabel Stock Kaset tidak ditemukan. Pastikan kolom A berisi kata 'CABANG'.")
+                st.info("Data Stock Kaset Kosong.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: 
-                st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                # Cari tabel yang diawali kata "REKAP"
-                st.dataframe(get_data_by_keyword("REKAP", ["PM", "JADWAL"], col_limit=6), use_container_width=True, hide_index=True)
-            with c2: 
-                st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                # Cari tabel yang diawali kata "PM" atau sejenisnya di kolom A
-                # Kalau susah, kita pakai range manual untuk yang ini saja
-                st.dataframe(df_sp_raw.iloc[31:38, 0:7].fillna(""), use_container_width=True, hide_index=True)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_force_data(24, 29, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_force_data(31, 38, 7), use_container_width=True, hide_index=True)
   
    
     # =========================================================================
@@ -1271,6 +1237,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
