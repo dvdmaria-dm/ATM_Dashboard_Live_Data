@@ -828,86 +828,64 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 
-     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FIXED COORDINATES A12:L21)
+    # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (A12:L21 - MURNI DARI SUMBER)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; }</style>""", unsafe_allow_html=True)
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        def get_data_kaset_presisi():
-            try:
-                if not df_sp_raw.empty:
-                    # KOORDINAT KAKU A12:L21
-                    # Baris 12 (Excel) = Index 11
-                    # Baris 21 (Excel) = Index 21
-                    # Kolom A (Excel) = Index 0
-                    # Kolom L (Excel) = Index 11 (Total 12 kolom)
-                    
-                    subset = df_sp_raw.iloc[11:21, 0:12]
-                    
-                    # Ambil baris pertama dari potongan (Baris 12) sebagai Header
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    
-                    # Bersihkan nama kolom agar tidak ada duplikat yang bikin error
-                    final_headers = []
-                    seen = {}
-                    for col in raw_headers:
-                        name = col if col not in ['', 'nan', 'None'] else "Info"
-                        if name in seen:
-                            seen[name] += 1
-                            final_headers.append(f"{name}_{seen[name]}")
-                        else:
-                            seen[name] = 0
-                            final_headers.append(name)
-                    
-                    # Buat DataFrame dari baris setelah header (Baris 13 s/d 21)
-                    df_res = pd.DataFrame(subset.values[1:], columns=final_headers)
-                    return clean_zeros(df_res)
-            except Exception as e:
-                st.error(f"Error Koordinat: {e}")
-            return pd.DataFrame()
+        # 1. AMBIL POTONGAN MURNI A12:L21
+        # Index 11 adalah Baris 12 Excel
+        # Index 21 adalah batas bawah (Baris 21)
+        # 0:12 adalah Kolom A sampai L
+        subset_kaset = df_sp_raw.iloc[11:21, 0:12]
+        
+        # 2. AMBIL HEADER LANGSUNG DARI BARIS 12 (Tanpa modifikasi!)
+        header_kaset = subset_kaset.iloc[0].tolist()
+        
+        # 3. AMBIL DATA DARI BARIS 13 SAMPAI 21
+        data_kaset = subset_kaset.values[1:]
+        
+        # 4. BENTUK DATAFRAME
+        df_kaset_final = pd.DataFrame(data_kaset, columns=header_kaset)
+        
+        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
+        
+        with tab1:
+            st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            # Sparepart A1:V10
+            sub_sp = df_sp_raw.iloc[0:10, 0:22]
+            st.dataframe(pd.DataFrame(sub_sp.values[1:], columns=sub_sp.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
-        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset (A12:L21)", "⚠️ Monitoring & PM"])
-        
-        with tab1: 
-            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Sparepart tetap di koordinat aslinya (A1:V10)
-            subset_sp = df_sp_raw.iloc[0:10, 0:22]
-            h_sp = [str(x) for x in subset_sp.iloc[0]]
-            st.dataframe(pd.DataFrame(subset_sp.values[1:], columns=h_sp), use_container_width=True, hide_index=True)
+        with tab2:
+            st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-        with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (Target A12:L21)</div>', unsafe_allow_html=True)
-            
-            df_kaset = get_data_kaset_presisi()
-            
-            if not df_kaset.empty:
-                # Logika Format Persen & Angka Bulat
-                for col in df_kaset.columns:
-                    if "CABANG" in col.upper(): continue
+            # Formating Angka & Persen (Agar tidak muncul banyak desimal)
+            for col in df_kaset_final.columns:
+                if col and "CABANG" not in str(col).upper():
                     try:
-                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
-                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        df_kaset[col] = s_numeric.apply(
+                        # Bersihkan simbol persen jika ada
+                        val_clean = df_kaset_final[col].astype(str).str.replace('%', '').str.strip()
+                        numeric_val = pd.to_numeric(val_clean, errors='coerce')
+                        
+                        # Jika angka <= 1.5 kita anggap persen (misal 0.95 -> 95%)
+                        df_kaset_final[col] = numeric_val.apply(
                             lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
                         )
                     except: pass
-                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            else:
-                st.warning("⚠️ Data di A12:L21 tidak terbaca. Pastikan sheet 'Sparepart&kaset' ada isinya.")
+            
+            st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Monitoring Rusak (Baris 25-30 -> Index 24-30)
-            with c1: 
-                st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
+            with c1:
+                st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
                 sub_rsk = df_sp_raw.iloc[24:30, 0:6]
-                st.dataframe(pd.DataFrame(sub_rsk.values[1:], columns=[str(x) for x in sub_rsk.iloc[0]]), use_container_width=True, hide_index=True)
-            # PM Kaset (Baris 32-39 -> Index 31-39)
-            with c2: 
-                st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame(sub_rsk.values[1:], columns=sub_rsk.iloc[0].tolist()), use_container_width=True, hide_index=True)
+            with c2:
+                st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
                 sub_pm = df_sp_raw.iloc[31:39, 0:7]
-                st.dataframe(pd.DataFrame(sub_pm.values[1:], columns=[str(x) for x in sub_pm.iloc[0]]), use_container_width=True, hide_index=True)  
+                st.dataframe(pd.DataFrame(sub_pm.values[1:], columns=sub_pm.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1241,6 +1219,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
