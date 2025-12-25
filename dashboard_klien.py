@@ -828,59 +828,57 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 
-    # --- CARI BAGIAN LOGIKA MENU UTAMA ---
+    # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET
+    # =========================================================================
+    if sel_cat == 'SparePart & Kaset':
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
+        def get_sp_slice(r_start, r_end, c_end):
+            if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end and df_sp_raw.shape[1] >= c_end:
+                subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
+                headers = subset.iloc[0].astype(str).tolist()
+                seen_counts = {}; final_cols = []
+                for col in headers:
+                    col = col.strip(); col = "Info" if col == "" else col
+                    if col in seen_counts: seen_counts[col] += 1; col = f"{col}_{seen_counts[col]}"
+                    else: seen_counts[col] = 0
+                    final_cols.append(col)
+                subset.columns = final_cols; return clean_zeros(subset[1:])
+            return pd.DataFrame()
+        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
+        with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
+        with tab2: 
+            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
+            # LOGIKA BARU: HANYA FORMAT PERSEN JIKA NILAINYA KECIL (<= 1.5)
+            # Ini mencegah angka "29" berubah jadi "2900%"
+            df_kaset = get_sp_slice(11, 22, 12)
+            
+            if not df_kaset.empty:
+                # 1. Bersihkan Header yang "Info", "Info_1" agar lebih enak dilihat (Opsional)
+                # Kalau mau header asli dari Excel, pastikan baris ke-12 di Google Sheets tidak kosong.
+                
+                for col in df_kaset.columns:
+                    # Lewati kolom pertama (biasanya Nama Cabang)
+                    if col == df_kaset.columns[0]: continue
+                    
+                    try:
+                        # Coba ubah ke angka
+                        s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
+                        
+                        # FUNGSI PINTAR:
+                        # Jika angkanya <= 1.5 (misal 0.99), jadikan persen (99%).
+                        # Jika angkanya > 1.5 (misal 29), BIARKAN ANGKA BIASA.
+                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else ""))
+                    except: 
+                        pass
+            
+            st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            
+        with tab3:
+            c1, c2 = st.columns(2)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(24, 28, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(31, 36, 7), use_container_width=True, hide_index=True)
 
-if sel_cat == 'Sparepart & Kaset':
-    # 1. STYLE TABEL
-    st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }</style>""", unsafe_allow_html=True)
-    
-    # 2. FUNGSI AMBIL DATA (A12:L21)
-    def get_final_table(start_row, end_row, start_col, end_col):
-        try:
-            if not df_sp_raw.empty:
-                subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
-                headers = subset.iloc[0].astype(str).str.strip().tolist()
-                final_headers = []
-                seen = {}
-                for h in headers:
-                    name = h if h.lower() not in ['nan', '', 'none'] else "Info"
-                    if name in seen:
-                        seen[name] += 1
-                        final_headers.append(f"{name}_{seen[name]}")
-                    else:
-                        seen[name] = 0
-                        final_headers.append(name)
-                return pd.DataFrame(subset.values[1:], columns=final_headers)
-        except: pass
-        return pd.DataFrame()
-
-    # 3. TAMPILKAN TAB
-    t1, t2, t3 = st.tabs(["🛠️ Sparepart", "📼 Kaset", "⚠️ Monitoring"])
-    with t1: st.dataframe(get_final_table(0, 10, 0, 22), use_container_width=True, hide_index=True)
-    with t2: 
-        df_kaset = get_final_table(11, 21, 0, 12) # TARGET A12:L21
-        # Format Persen Sederhana
-        for col in df_kaset.columns:
-            if "CABANG" not in col.upper():
-                try:
-                    df_kaset[col] = pd.to_numeric(df_kaset[col].astype(str).str.replace('%',''), errors='coerce').apply(lambda x: f"{x:.0%}" if x <= 1.5 else f"{x:.0f}")
-                except: pass
-        st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-    with t3:
-        st.dataframe(get_final_table(24, 30, 0, 6), use_container_width=True, hide_index=True)
-
-    # ⛔ REM TANGAN PALING PAKEM
-    st.stop()
-
-# --- JANGAN KASIH CELAH ---
-# Baris di bawah ini HANYA boleh jalan kalau sel_cat BUKAN Sparepart
-else:
-    # Semua kode performance kau (Termasuk baris 1049 itu)
-    # Masukkan semua kode sisa dashboard kau ke dalam blok 'else' ini
-    
-    # ... kode-kode performance ...
-    # val = get_val_std(df_curr[df_curr['WEEK'] == w]) <--- Pastikan ini ada di dalam 'else'
-    
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
     # =========================================================================
@@ -1213,16 +1211,6 @@ else:
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
-
-
-
-
-
-
-
-
-
-
 
 
 
