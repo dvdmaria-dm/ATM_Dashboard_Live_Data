@@ -827,41 +827,82 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-   # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (MODE DETEKTIF / X-RAY)
     # =========================================================================
+    # 1. LAYOUT KHUSUS: Sparepart&kaset (NAMA SUDAH DIPERBAIKI)
+    # =========================================================================
+    # Perhatikan: string di bawah ini sekarang persis 'Sparepart&kaset'
     if sel_cat == 'Sparepart&kaset':
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #ffcccc !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        st.error("🕵️ MODE DETEKTIF: MENAMPILKAN DATA MENTAH DARI GOOGLE SHEETS")
-        
-        # 1. Tampilkan Info Ukuran Data
-        rows = df_sp_raw.shape[0] if not df_sp_raw.empty else 0
-        cols = df_sp_raw.shape[1] if not df_sp_raw.empty else 0
-        
-        st.write(f"📊 **Python melihat Data Sebesar:** {rows} Baris x {cols} Kolom")
-        st.write("Coba Abang perhatikan tabel di bawah ini. Apakah ini data yang benar atau data hantu?")
+        # Helper Data Custom (X1:AI10)
+        def get_custom_data(r_header_idx, r_data_stop_idx, c_start_idx, c_end_idx):
+            try:
+                if not df_sp_raw.empty:
+                    # Cek ketersediaan kolom
+                    if df_sp_raw.shape[1] < c_start_idx:
+                        return pd.DataFrame(columns=[f"Error: Sheet 'Sparepart&kaset' terbaca, tapi kolom kurang (Cuma {df_sp_raw.shape[1]})"])
 
-        tab1, tab2 = st.tabs(["👁️ LIHAT DATA MENTAH (FULL)", "📍 LIHAT KOLOM X (KOORDINAT BARU)"])
+                    # 1. AMBIL HEADER
+                    header_row = df_sp_raw.iloc[r_header_idx, c_start_idx:c_end_idx]
+                    raw_headers = header_row.astype(str).str.strip().tolist()
+                    
+                    # 2. BERSIHKAN HEADER
+                    final_headers = []
+                    seen_counts = {}
+                    for col in raw_headers:
+                        if col.lower() in ['nan', 'none', '']: col = "Info"
+                        if col in seen_counts:
+                            seen_counts[col] += 1
+                            final_headers.append(f"{col}_{seen_counts[col]}")
+                        else:
+                            seen_counts[col] = 0
+                            final_headers.append(col)
+                    
+                    # 3. AMBIL DATA
+                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, c_start_idx:c_end_idx].values
+                    
+                    # 4. BUAT TABEL
+                    new_df = pd.DataFrame(data_values, columns=final_headers)
+                    return clean_zeros(new_df)
+            except Exception as e:
+                return pd.DataFrame(columns=[f"Error Script: {str(e)}"])
+            return pd.DataFrame()
+
+        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
-        with tab1:
-            st.caption("Ini seluruh isi Sheet yang dibaca Python (Tanpa Filter):")
-            st.dataframe(df_sp_raw, use_container_width=True)
+        with tab1: 
+            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            # Sparepart asumsi masih di A1:V10 (Aman)
+            st.dataframe(get_custom_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
             
-        with tab2:
-            st.caption("Ini fokus ke Kolom X (Index 23) sampai AI (Index 34):")
+        with tab2: 
+            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (X1:AI10)</div>', unsafe_allow_html=True)
             
-            if cols > 23:
-                # Coba ambil potongan X s/d AI tanpa header fancy
-                # Index 23 = Kolom X
-                # Index 35 = Batas kanan
-                slice_x = df_sp_raw.iloc[:, 23:35]
-                st.dataframe(slice_x, use_container_width=True)
+            # --- UJI COBA KOORDINAT X1:AI10 ---
+            # Row 0-10, Kolom 23 (X) - 35 (AI)
+            
+            df_kaset = get_custom_data(0, 10, 23, 35) 
+            
+            if not df_kaset.empty and "Error" not in df_kaset.columns[0]:
+                for col in df_kaset.columns:
+                    if "CABANG" in col.upper(): continue
+                    try:
+                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
+                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
+                        
+                        df_kaset[col] = s_numeric.apply(
+                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                        )
+                    except: pass
+                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.error(f"⚠️ KOSONG! Python cuma melihat {cols} kolom. Kolom X (ke-24) tidak terjangkau.")
-                st.info("Kemungkinan penyebab: Load Data di bagian atas script salah target Sheet.")
+                st.warning("⚠️ Data Kosong / Salah Sheet")
+                st.write("Coba cek: Apakah nama sheet di `load_data` bagian atas script sudah diganti jadi `Sparepart&kaset`?")
 
-        st.warning("⚠️ Jika tabel di atas BUKAN data Abang, berarti fungsi 'load_data' di atas salah ambil Sheet.")
+        with tab3:
+            c1, c2 = st.columns(2)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(24, 29, 0, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(31, 38, 0, 7), use_container_width=True, hide_index=True)
   
    
     # =========================================================================
@@ -1196,6 +1237,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
