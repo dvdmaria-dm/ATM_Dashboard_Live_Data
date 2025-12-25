@@ -828,33 +828,26 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
    # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FORCE COORDINATE A12:L22)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL - HARD RESET TABLE)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        def get_force_data(r_start_idx, r_end_idx, c_end_idx):
+        def get_force_data(r_header_idx, r_data_stop_idx, c_limit_idx):
             try:
                 if not df_sp_raw.empty:
-                    # PAKSA POTONG DI KOORDINAT INI
-                    # r_start_idx = 11 (Excel Baris 12)
-                    # r_end_idx   = 22 (Excel Baris 22 - Kupang Masuk)
-                    # c_end_idx   = 12 (Kolom A s/d L - PAS 12 KOLOM)
+                    # 1. AMBIL HEADER (Baris ke-12 Excel / Index 11)
+                    header_row = df_sp_raw.iloc[r_header_idx, 0:c_limit_idx]
+                    raw_headers = header_row.astype(str).str.strip().tolist()
                     
-                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
-                    
-                    # 1. AMBIL HEADER
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    
-                    # 2. PENGAMAN NAMA KEMBAR (WAJIB ADA BIAR GAK CRASH)
+                    # 2. BERSIHKAN NAMA HEADER (Pengaman Duplikat & Kosong)
                     final_headers = []
                     seen_counts = {}
-                    
                     for col in raw_headers:
-                        # Ganti nama kalau kosong
-                        if col.lower() in ['nan', 'none', '']:
-                            col = "Info"
+                        # Kalau kosong/nan ganti jadi Info
+                        if col.lower() in ['nan', 'none', '']: col = "Info"
                         
+                        # Kalau kembar, tambah angka _1
                         if col in seen_counts:
                             seen_counts[col] += 1
                             final_headers.append(f"{col}_{seen_counts[col]}")
@@ -862,11 +855,15 @@ elif st.session_state['app_mode'] == 'main':
                             seen_counts[col] = 0
                             final_headers.append(col)
                     
-                    subset.columns = final_headers
+                    # 3. AMBIL ISINYA SAJA (Data Values)
+                    # Mulai dari r_header_idx + 1 (Baris 13 Excel) sampai r_data_stop_idx
+                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, 0:c_limit_idx].values
                     
-                    # 3. AMBIL DATA
-                    data_only = subset[1:]
-                    return clean_zeros(data_only)
+                    # 4. BIKIN TABEL BARU (HARD CREATE)
+                    # Ini kuncinya: Kita buat DataFrame baru dengan columns yang dipaksa
+                    new_df = pd.DataFrame(data_values, columns=final_headers)
+                    
+                    return clean_zeros(new_df)
             except: pass
             return pd.DataFrame()
 
@@ -879,8 +876,11 @@ elif st.session_state['app_mode'] == 'main':
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- EKSEKUSI PAKSA (FORCE) ---
-            # Kita tidak mencari-cari lagi. Kita langsung tembak lokasinya.
+            # --- KOORDINAT FINAL (A12:L22) ---
+            # Header Index: 11 (Excel 12)
+            # Stop Index: 22 (Excel 22 - Kupang Masuk)
+            # Kolom Limit: 12 (A-L)
+            
             df_kaset = get_force_data(11, 22, 12) 
             
             if not df_kaset.empty:
@@ -901,6 +901,7 @@ elif st.session_state['app_mode'] == 'main':
 
         with tab3:
             c1, c2 = st.columns(2)
+            # Tabel Bawah
             with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_force_data(24, 29, 6), use_container_width=True, hide_index=True)
             with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_force_data(31, 38, 7), use_container_width=True, hide_index=True)
   
@@ -1237,6 +1238,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
