@@ -829,62 +829,85 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (CEK DUA LOKASI)
+    # 1. LAYOUT KHUSUS: Sparepart&kaset (KOORDINAT A12:L21)
     # =========================================================================
-    if sel_cat == 'SparePart & Kaset':
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #e0f2f1 !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
+    if sel_cat == 'Sparepart&kaset':
+        # Style Header Tabel
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        st.info("🔍 DIAGNOSA DATA: Membandingkan Lokasi Lama (A) vs Baru (X)")
-
-        tab1, tab2 = st.tabs(["LOKASI A (A12:L22)", "LOKASI X (X1:AI10)"])
-        
-        # --- TAB 1: CEK LOKASI LAMA (A12) ---
-        with tab1:
-            st.write("Melihat Koordinat **A12 s/d L22**:")
-            if not df_sp_raw.empty:
-                # Ambil mentah, jangan diolah dulu biar kelihatan aslinya
-                # Index 11 = Baris 12
-                # Index 22 = Baris 23
-                # Kolom 0-12 = A-L
-                slice_a = df_sp_raw.iloc[11:22, 0:12]
-                st.dataframe(slice_a, use_container_width=True)
-            else:
-                st.write("Data Kosong")
-
-        # --- TAB 2: CEK LOKASI BARU (X1) ---
-        with tab2:
-            st.write("Melihat Koordinat **X1 s/d AI10**:")
-            if not df_sp_raw.empty and df_sp_raw.shape[1] >= 35:
-                # Index 0 = Baris 1
-                # Index 10 = Baris 11
-                # Kolom 23 = X
-                # Kolom 35 = AI
-                slice_x = df_sp_raw.iloc[0:10, 23:35]
-                
-                # --- PROSES MEMBERSIHKAN HEADER (X1) ---
-                # Kita anggap Baris Pertama (Index 0) adalah Header Sebenarnya
-                try:
-                    raw_headers = slice_x.iloc[0].astype(str).str.strip().tolist()
+        # Fungsi ambil data berdasarkan koordinat
+        def get_table_data(start_row, end_row, start_col, end_col):
+            try:
+                if not df_sp_raw.empty:
+                    # Ambil potongan data (Slicing)
+                    subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
                     
-                    # Buat nama unik (Anti Crash)
+                    # 1. Ambil Baris Pertama sebagai Header
+                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    
+                    # 2. Pengaman Header (Nama Unik)
                     final_headers = []
                     seen = {}
-                    for h in raw_headers:
-                        if h in seen: seen[h]+=1; final_headers.append(f"{h}_{seen[h]}")
-                        else: seen[h]=0; final_headers.append(h)
+                    for col in raw_headers:
+                        val = col if col.lower() not in ['nan', '', 'none'] else "Info"
+                        if val in seen:
+                            seen[val] += 1
+                            final_headers.append(f"{val}_{seen[val]}")
+                        else:
+                            seen[val] = 0
+                            final_headers.append(val)
                     
-                    # Pasang Header & Tampilkan Data
-                    # Kita ambil data mulai baris ke-2 (Index 1) karena Index 0 itu header
-                    df_show = pd.DataFrame(slice_x.values[1:], columns=final_headers)
-                    
-                    st.success("✅ Jika tabel di bawah ini RAPI, berarti data BENAR ada di X1.")
-                    st.dataframe(df_show, use_container_width=True, hide_index=True)
-                except Exception as e:
-                    st.error(f"Gagal memproses header: {e}")
-                    st.dataframe(slice_x) # Tampilkan mentah kalau gagal
+                    # 3. Buat DataFrame Baru yang Bersih
+                    new_df = pd.DataFrame(subset.values[1:], columns=final_headers)
+                    return clean_zeros(new_df)
+            except: pass
+            return pd.DataFrame()
+
+        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
+        
+        with tab1: 
+            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            # A1:V10 -> Index (0:10, 0:22)
+            st.dataframe(get_table_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
+            
+        with tab2: 
+            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
+            
+            # --- TARGET: A12:L21 ---
+            # Baris 12 (Excel) = Index 11
+            # Baris 21 (Excel) = Index 21
+            # Kolom A s/d L = Index 0 s/d 12
+            df_kaset = get_table_data(11, 21, 0, 12) 
+            
+            if not df_kaset.empty:
+                # Format Persen & Angka
+                for col in df_kaset.columns:
+                    if "CABANG" in col.upper(): continue
+                    try:
+                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
+                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
+                        df_kaset[col] = s_numeric.apply(
+                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                        )
+                    except: pass
+                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.error("❌ KOSONG / ERROR. Kolom X (Index 23) tidak ditemukan.")
-                st.caption("Penyebab: Data di memori masih data lama (sebelum digeser). Wajib Clear Cache.")
+                st.info("Data Kaset di A12:L21 tidak terbaca.")
+
+        with tab3:
+            c1, c2 = st.columns(2)
+            # Rekap Rusak (A25:F30) -> Index (24:30, 0:6)
+            with c1: 
+                st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
+                st.dataframe(get_table_data(24, 30, 0, 6), use_container_width=True, hide_index=True)
+            # PM Kaset (A32:G39) -> Index (31:39, 0:7)
+            with c2: 
+                st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
+                st.dataframe(get_table_data(31, 39, 0, 7), use_container_width=True, hide_index=True)
+
+        # AGAR TIDAK ERROR 'WEEK'
+        # Kita hentikan proses script di sini agar tidak lanjut ke logika filter WEEK di bawah
+        st.stop()
     
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1218,6 +1241,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
