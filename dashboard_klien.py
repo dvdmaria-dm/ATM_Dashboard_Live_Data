@@ -828,43 +828,56 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 
-    # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - KUPANG INCLUDED)
+   # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (HEADER LENGKAP A11:M22)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper dengan PENANGKAL ERROR DUPLIKAT
-        def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx):
+        def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx, has_double_header=False):
             try:
                 if not df_sp_raw.empty:
-                    # POTONG SESUAI KOORDINAT
+                    # Ambil potongan data
                     subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
                     
-                    # 1. AMBIL HEADER MENTAH
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    
-                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (ANTI CRASH)
-                    final_headers = []
-                    seen_counts = {}
-                    
-                    for col in raw_headers:
-                        # Jika nama kolom kosong/nan, ganti jadi "Info"
-                        if col.lower() in ['nan', 'none', '']:
-                            col = "Info"
+                    if has_double_header:
+                        # --- LOGIKA HEADER GABUNGAN (Baris 11 + Baris 12) ---
+                        # h1: Baris Judul Bulan (NOV, W1 DEC, dst)
+                        # h2: Baris Judul Kolom (JML, GC, GR)
+                        h1 = subset.iloc[0].astype(str).replace(['nan', 'None', ''], method='ffill').tolist()
+                        h2 = subset.iloc[1].astype(str).tolist()
+                        
+                        final_headers = []
+                        for i in range(len(h1)):
+                            head1 = "" if h1[i].lower() in ['nan', 'none', ''] else h1[i]
+                            head2 = "" if h2[i].lower() in ['nan', 'none', ''] else h2[i]
                             
-                        if col in seen_counts:
-                            seen_counts[col] += 1
-                            final_headers.append(f"{col}_{seen_counts[col]}") 
+                            # Jika nama kolom sama (seperti Cabang), jangan digabung
+                            if head1 == head2 or head1 == "":
+                                combined = head2
+                            else:
+                                combined = f"{head1} {head2}".strip()
+                            final_headers.append(combined)
+                        
+                        data_only = subset[2:] # Data mulai baris ke-3 dari potongan
+                    else:
+                        # Header Single (Untuk Sparepart/Lainnya)
+                        final_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                        data_only = subset[1:]
+
+                    # Beri nama unik agar tidak Duplicate Error
+                    safe_headers = []
+                    seen = {}
+                    for h in final_headers:
+                        name = h if h not in ['', 'nan'] else "Info"
+                        if name in seen:
+                            seen[name] += 1
+                            safe_headers.append(f"{name}_{seen[name]}")
                         else:
-                            seen_counts[col] = 0
-                            final_headers.append(col)
+                            seen[name] = 0
+                            safe_headers.append(name)
                     
-                    # 3. PASANG HEADER BARU
-                    subset.columns = final_headers
-                    
-                    # 4. AMBIL DATA
-                    data_only = subset[1:]
+                    data_only.columns = safe_headers
                     return clean_zeros(data_only)
             except: pass
             return pd.DataFrame()
@@ -873,30 +886,29 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            # Sparepart A1:V10 (Single Header)
             st.dataframe(get_strict_data_safe(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- UPDATE: TARIK SAMPAI BARIS 22 (Index 22) ---
-            # Start: 11 (Header Excel 12)
-            # End: 22 (Data Excel 22 - KUPANG MASUK)
-            # Cols: 13 (A s/d M)
+            # --- UPDATE: AMBIL DARI BARIS 11 (Index 10) AGAR HEADER BULAN KEBACA ---
+            # Start: 10 (Baris 11 Excel - Judul Bulan)
+            # End: 22 (Baris 22 Excel - Kupang)
+            # has_double_header=True (Gabungin Baris 11 & 12)
             
-            df_kaset = get_strict_data_safe(11, 22, 13) 
+            df_kaset = get_strict_data_safe(10, 22, 13, has_double_header=True) 
             
             if not df_kaset.empty:
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper() or "INFO" in col.upper(): continue
+                    if "CABANG" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
                         s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        
                         df_kaset[col] = s_numeric.apply(
                             lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
                         )
                     except: pass
-                
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
                 st.info("Data Stock Kaset Kosong.")
@@ -1238,6 +1250,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
