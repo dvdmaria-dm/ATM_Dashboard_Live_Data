@@ -829,17 +829,15 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (100% PERFECT - NO EMPTY ROW)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL CLEAN - NO EMPTY ROWS)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # 1. AMBIL DATA A11:L22 (Mulai dari baris 11 Excel agar aman)
-        # Index 10 = Baris 11
-        # Index 22 = Baris 22 (Kupang)
-        subset_kaset = df_sp_raw.iloc[10:22, 0:12]
+        # 1. AMBIL DATA A12:L22 (Index 11 sampai 22)
+        subset_kaset = df_sp_raw.iloc[11:22, 0:12]
         
-        # 2. HEADER MANUAL (Tetap Pakai Ini)
+        # 2. HEADER MANUAL (Tetap Pakai Ini Biar Rapi)
         manual_headers = [
             "CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT",
             "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT",
@@ -848,10 +846,16 @@ elif st.session_state['app_mode'] == 'main':
             "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"
         ]
         
-        # 3. BUAT DATAFRAME (KUNCINYA DI SINI)
-        # Kita ambil data mulai dari Index 2 (Baris 13 Excel) 
-        # Untuk membuang baris header asli (11 & 12) yang bikin kosong di dashboard
-        df_kaset_final = pd.DataFrame(subset_kaset.values[2:], columns=manual_headers)
+        # 3. BUAT DATAFRAME MULAI DARI BARIS KE-13 (Index 1 dari subset)
+        df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
+        
+        # --- ⚡ SENTUHAN MAUT: BUANG BARIS KOSONG / HEADER NYANGKUT ---
+        # Kita hapus baris jika kolom CABANG kosong atau berisi teks "CABANG"
+        df_kaset_final = df_kaset_final[
+            (df_kaset_final['CABANG'].str.strip() != "") & 
+            (df_kaset_final['CABANG'].notna()) &
+            (df_kaset_final['CABANG'].str.upper() != "CABANG")
+        ]
         
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
@@ -861,7 +865,7 @@ elif st.session_state['app_mode'] == 'main':
             st.dataframe(pd.DataFrame(sub_sp.values[1:], columns=sub_sp.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
         with tab2:
-            st.markdown('<div class="section-header">📼 Ketersediaan Kaset (Full Data)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">📼 Ketersediaan Kaset (Sempurna)</div>', unsafe_allow_html=True)
             
             # FORMATTING PERSEN & ANGKA
             for col in df_kaset_final.columns:
@@ -874,7 +878,7 @@ elif st.session_state['app_mode'] == 'main':
                         )
                     except: pass
             
-            # Tampilkan Tabel yang sudah bersih dari baris kosong
+            # Tampilkan tabel yang sudah benar-benar bersih
             st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
         with tab3:
@@ -1220,6 +1224,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
