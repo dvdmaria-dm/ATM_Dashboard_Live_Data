@@ -828,7 +828,7 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 
-    # =========================================================================
+   # =========================================================================
     # 1. LAYOUT KHUSUS: SPAREPART & KASET (UPDATED RANGE A12:L21)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
@@ -1228,6 +1228,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
