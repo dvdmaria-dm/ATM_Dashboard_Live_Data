@@ -827,27 +827,30 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-   # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL - HARD RESET TABLE)
+      # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (TEST X1:AI10)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        def get_force_data(r_header_idx, r_data_stop_idx, c_limit_idx):
+        # Helper Baru: Bisa atur Kolom Awal & Akhir
+        def get_custom_data(r_header_idx, r_data_stop_idx, c_start_idx, c_end_idx):
             try:
                 if not df_sp_raw.empty:
-                    # 1. AMBIL HEADER (Baris ke-12 Excel / Index 11)
-                    header_row = df_sp_raw.iloc[r_header_idx, 0:c_limit_idx]
+                    # Cek apakah kolom X (Index 23) ada di data?
+                    if df_sp_raw.shape[1] < c_start_idx:
+                        return pd.DataFrame(columns=["ERROR: Data Excel tidak sampai Kolom X"])
+
+                    # 1. AMBIL HEADER
+                    # iloc[baris, kol_awal:kol_akhir]
+                    header_row = df_sp_raw.iloc[r_header_idx, c_start_idx:c_end_idx]
                     raw_headers = header_row.astype(str).str.strip().tolist()
                     
-                    # 2. BERSIHKAN NAMA HEADER (Pengaman Duplikat & Kosong)
+                    # 2. BERSIHKAN NAMA HEADER (Hard Reset)
                     final_headers = []
                     seen_counts = {}
                     for col in raw_headers:
-                        # Kalau kosong/nan ganti jadi Info
                         if col.lower() in ['nan', 'none', '']: col = "Info"
-                        
-                        # Kalau kembar, tambah angka _1
                         if col in seen_counts:
                             seen_counts[col] += 1
                             final_headers.append(f"{col}_{seen_counts[col]}")
@@ -855,41 +858,41 @@ elif st.session_state['app_mode'] == 'main':
                             seen_counts[col] = 0
                             final_headers.append(col)
                     
-                    # 3. AMBIL ISINYA SAJA (Data Values)
-                    # Mulai dari r_header_idx + 1 (Baris 13 Excel) sampai r_data_stop_idx
-                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, 0:c_limit_idx].values
+                    # 3. AMBIL DATA VALUES
+                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, c_start_idx:c_end_idx].values
                     
-                    # 4. BIKIN TABEL BARU (HARD CREATE)
-                    # Ini kuncinya: Kita buat DataFrame baru dengan columns yang dipaksa
+                    # 4. BUAT TABEL BARU
                     new_df = pd.DataFrame(data_values, columns=final_headers)
-                    
                     return clean_zeros(new_df)
-            except: pass
+            except Exception as e:
+                return pd.DataFrame(columns=[f"Error: {str(e)}"])
             return pd.DataFrame()
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_force_data(0, 10, 22), use_container_width=True, hide_index=True)
+            # Sparepart A1:V10 (Index 0 s/d 10, Kolom 0 s/d 22)
+            st.dataframe(get_custom_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (X1:AI10)</div>', unsafe_allow_html=True)
             
-            # --- KOORDINAT FINAL (A12:L22) ---
-            # Header Index: 11 (Excel 12)
-            # Stop Index: 22 (Excel 22 - Kupang Masuk)
-            # Kolom Limit: 12 (A-L)
+            # --- UJI COBA KOORDINAT X1:AI10 ---
+            # Header Row 1 = Index 0
+            # Data Stop Row 10 = Index 10
+            # Kolom X = Index 23
+            # Kolom AI = Index 35 (Jadi total 12 kolom: X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI)
             
-            df_kaset = get_force_data(11, 22, 12) 
+            df_kaset = get_custom_data(0, 10, 23, 35) 
             
             if not df_kaset.empty:
+                # Format Persen
                 for col in df_kaset.columns:
                     if "CABANG" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
                         s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        
                         df_kaset[col] = s_numeric.apply(
                             lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
                         )
@@ -897,13 +900,13 @@ elif st.session_state['app_mode'] == 'main':
                 
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Stock Kaset Kosong.")
+                st.info("Data di koordinat X1:AI10 Kosong atau Tidak Terbaca.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Tabel Bawah
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_force_data(24, 29, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_force_data(31, 38, 7), use_container_width=True, hide_index=True)
+            # Tabel bawah tetap di A (Kolom 0-6 dan 0-7)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(24, 29, 0, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(31, 38, 0, 7), use_container_width=True, hide_index=True) 
   
    
     # =========================================================================
@@ -1238,6 +1241,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
