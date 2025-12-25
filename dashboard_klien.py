@@ -905,7 +905,7 @@ elif st.session_state['app_mode'] == 'main':
             c1, c2 = st.columns(2)
             with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(24, 29, 6), use_container_width=True, hide_index=True)
             with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(31, 38, 7), use_container_width=True, hide_index=True)
-
+    
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
     # =========================================================================
@@ -1238,6 +1238,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
