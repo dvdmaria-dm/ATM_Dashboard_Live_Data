@@ -827,86 +827,73 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-      # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (TEST X1:AI10)
+    # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (MODE DIAGNOSA X1:AI10)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Helper Baru: Bisa atur Kolom Awal & Akhir
-        def get_custom_data(r_header_idx, r_data_stop_idx, c_start_idx, c_end_idx):
-            try:
-                if not df_sp_raw.empty:
-                    # Cek apakah kolom X (Index 23) ada di data?
-                    if df_sp_raw.shape[1] < c_start_idx:
-                        return pd.DataFrame(columns=["ERROR: Data Excel tidak sampai Kolom X"])
-
-                    # 1. AMBIL HEADER
-                    # iloc[baris, kol_awal:kol_akhir]
-                    header_row = df_sp_raw.iloc[r_header_idx, c_start_idx:c_end_idx]
-                    raw_headers = header_row.astype(str).str.strip().tolist()
-                    
-                    # 2. BERSIHKAN NAMA HEADER (Hard Reset)
-                    final_headers = []
-                    seen_counts = {}
-                    for col in raw_headers:
-                        if col.lower() in ['nan', 'none', '']: col = "Info"
-                        if col in seen_counts:
-                            seen_counts[col] += 1
-                            final_headers.append(f"{col}_{seen_counts[col]}")
-                        else:
-                            seen_counts[col] = 0
-                            final_headers.append(col)
-                    
-                    # 3. AMBIL DATA VALUES
-                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, c_start_idx:c_end_idx].values
-                    
-                    # 4. BUAT TABEL BARU
-                    new_df = pd.DataFrame(data_values, columns=final_headers)
-                    return clean_zeros(new_df)
-            except Exception as e:
-                return pd.DataFrame(columns=[f"Error: {str(e)}"])
-            return pd.DataFrame()
-
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Sparepart A1:V10 (Index 0 s/d 10, Kolom 0 s/d 22)
-            st.dataframe(get_custom_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
+            # Tampilkan 10 baris pertama, 22 kolom pertama (A-V)
+            if not df_sp_raw.empty:
+                st.dataframe(df_sp_raw.iloc[0:10, 0:22], use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (X1:AI10)</div>', unsafe_allow_html=True)
             
-            # --- UJI COBA KOORDINAT X1:AI10 ---
-            # Header Row 1 = Index 0
-            # Data Stop Row 10 = Index 10
-            # Kolom X = Index 23
-            # Kolom AI = Index 35 (Jadi total 12 kolom: X, Y, Z, AA, AB, AC, AD, AE, AF, AG, AH, AI)
+            # --- CEK JUMLAH KOLOM DULU ---
+            total_rows = df_sp_raw.shape[0] if not df_sp_raw.empty else 0
+            total_cols = df_sp_raw.shape[1] if not df_sp_raw.empty else 0
             
-            df_kaset = get_custom_data(0, 10, 23, 35) 
-            
-            if not df_kaset.empty:
-                # Format Persen
-                for col in df_kaset.columns:
-                    if "CABANG" in col.upper(): continue
-                    try:
-                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
-                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        df_kaset[col] = s_numeric.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
-                    except: pass
-                
-                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            # Kolom X itu index ke-23. Jadi minimal harus ada 24 kolom biar kebaca.
+            if total_cols < 24:
+                st.error(f"⚠️ MASALAH TERDETEKSI: Python cuma melihat {total_cols} kolom. Padahal Kolom X itu urutan ke-24.")
+                st.info("SOLUSI: Klik Titik Tiga di Pojok Kanan Atas -> Pilih 'Clear Cache'. Lalu Refresh.")
+                # Tampilkan data mentah biar Abang percaya
+                st.caption("Ini Data Mentah yang dilihat Python sekarang (Pasti kolom X nya belum masuk):")
+                st.dataframe(df_sp_raw)
             else:
-                st.info("Data di koordinat X1:AI10 Kosong atau Tidak Terbaca.")
+                # Kalo kolom cukup, kita potong X1:AI10
+                # Row 0-10, Col 23-35
+                try:
+                    subset = df_sp_raw.iloc[0:10, 23:35]
+                    
+                    # Ambil Header dari Baris Pertama potongan
+                    headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    final_headers = []
+                    seen = {}
+                    for h in headers:
+                        if h in seen: seen[h]+=1; final_headers.append(f"{h}_{seen[h]}")
+                        else: seen[h]=0; final_headers.append(h)
+                    
+                    # Pasang Header & Data
+                    subset.columns = final_headers
+                    data_clean = subset[1:] # Ambil isinya
+                    
+                    # Format Persen
+                    for col in data_clean.columns:
+                        if "CABANG" in col.upper(): continue
+                        try:
+                            clean_val = data_clean[col].astype(str).str.replace('%', '').str.strip()
+                            s_numeric = pd.to_numeric(clean_val, errors='coerce')
+                            data_clean[col] = s_numeric.apply(
+                                lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                            )
+                        except: pass
+
+                    st.success(f"✅ Data Ditemukan di Kolom X (Index 23) sampai AI (Index 34)")
+                    st.dataframe(data_clean, use_container_width=True, hide_index=True)
+                
+                except Exception as e:
+                    st.error(f"Error Potong Data: {e}")
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Tabel bawah tetap di A (Kolom 0-6 dan 0-7)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(24, 29, 0, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(31, 38, 0, 7), use_container_width=True, hide_index=True) 
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); 
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True);
   
    
     # =========================================================================
@@ -1241,6 +1228,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
