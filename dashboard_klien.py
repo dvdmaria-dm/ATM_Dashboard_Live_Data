@@ -830,7 +830,7 @@ elif st.session_state['app_mode'] == 'main':
    # =========================================================================
     # 1. LAYOUT KHUSUS: SPAREPART & KASET (MODE DETEKTIF / X-RAY)
     # =========================================================================
-    if sel_cat == 'SparePart & Kaset':
+    if sel_cat == 'Sparepart&kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #ffcccc !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
         st.error("🕵️ MODE DETEKTIF: MENAMPILKAN DATA MENTAH DARI GOOGLE SHEETS")
@@ -1196,6 +1196,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
