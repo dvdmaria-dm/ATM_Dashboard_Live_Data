@@ -829,82 +829,46 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - KUPANG INCLUDED)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        
-        # Fungsi Helper dengan PENANGKAL ERROR DUPLIKAT
-        def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx):
-            try:
-                if not df_sp_raw.empty:
-                    # POTONG SESUAI KOORDINAT
-                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
-                    
-                    # 1. AMBIL HEADER MENTAH
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    
-                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (ANTI CRASH)
-                    final_headers = []
-                    seen_counts = {}
-                    
-                    for col in raw_headers:
-                        # Jika nama kolom kosong/nan, ganti jadi "Info"
-                        if col.lower() in ['nan', 'none', '']:
-                            col = "Info"
-                            
-                        if col in seen_counts:
-                            seen_counts[col] += 1
-                            final_headers.append(f"{col}_{seen_counts[col]}") 
-                        else:
-                            seen_counts[col] = 0
-                            final_headers.append(col)
-                    
-                    # 3. PASANG HEADER BARU
-                    subset.columns = final_headers
-                    
-                    # 4. AMBIL DATA
-                    data_only = subset[1:]
-                    return clean_zeros(data_only)
-            except: pass
+        def get_sp_slice(r_start, r_end, c_end):
+            if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end and df_sp_raw.shape[1] >= c_end:
+                subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
+                headers = subset.iloc[0].astype(str).tolist()
+                seen_counts = {}; final_cols = []
+                for col in headers:
+                    col = col.strip(); col = "Info" if col == "" else col
+                    if col in seen_counts: seen_counts[col] += 1; col = f"{col}_{seen_counts[col]}"
+                    else: seen_counts[col] = 0
+                    final_cols.append(col)
+                subset.columns = final_cols; return clean_zeros(subset[1:])
             return pd.DataFrame()
-
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
-        
-        with tab1: 
-            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_strict_data_safe(0, 10, 22), use_container_width=True, hide_index=True)
-            
+        with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            
-            # --- UPDATE: TARIK SAMPAI BARIS 22 (Index 22) ---
-            # Start: 11 (Header Excel 12)
-            # End: 22 (Data Excel 22 - KUPANG MASUK)
-            # Cols: 13 (A s/d M)
-            
-            df_kaset = get_strict_data_safe(11, 22, 13) 
-            
+            # LOGIKA FORMAT PERSEN KHUSUS STOCK KASET
+            df_kaset = get_sp_slice(11, 22, 12)
             if not df_kaset.empty:
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper() or "INFO" in col.upper(): continue
+                    # Lewati kolom CABANG/NAMA KOTA (biasanya kolom pertama)
+                    if "CABANG" in col.upper() or "KOTA" in col.upper() or col == df_kaset.columns[0]:
+                        continue
+                    # Konversi angka string ke float lalu format persen
+                    # Misal: "0.99" -> 0.99 -> "99%"
+                    # Misal: "1" -> 1.0 -> "100%"
                     try:
-                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
-                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        
-                        df_kaset[col] = s_numeric.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
+                        s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
+                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if pd.notnull(x) else "")
                     except: pass
-                
-                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            else:
-                st.info("Data Stock Kaset Kosong.")
-
+            st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(24, 29, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(31, 38, 7), use_container_width=True, hide_index=True)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(24, 28, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(31, 36, 7), use_container_width=True, hide_index=True)
     
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1238,6 +1202,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
