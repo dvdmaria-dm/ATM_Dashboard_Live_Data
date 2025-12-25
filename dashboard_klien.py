@@ -828,12 +828,11 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (STABLE VERSION - ANTI DUPLICATE)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FIXED INDENTATION & COORDINATES)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # --- FUNGSI SAKTI: BUAT HEADER UNIK (AGAR TIDAK DUPLICATE ERROR) ---
         def make_unique_df(subset_data):
             try:
                 raw_h = [str(x).strip() if str(x).strip() != "" else "Info" for x in subset_data.iloc[0]]
@@ -849,19 +848,16 @@ elif st.session_state['app_mode'] == 'main':
                 return pd.DataFrame(subset_data.values[1:], columns=final_h)
             except: return pd.DataFrame()
 
-        # 1. PROSES TABEL KASET (A12:L22)
+        # Data Kaset A12:L22
         subset_kaset = df_sp_raw.iloc[11:22, 0:12]
-        manual_headers = ["CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT", "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT", "W2 DEC GOOD CURRENT", "W2 DEC GOOD REJECT", "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT", "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"]
+        manual_headers = ["CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT", "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT", "W2 DEC GOOD REJECT", "W2 DEC GOOD CURRENT", "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT", "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"]
         df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
-        
-        # Buat baris kosong/header nyangkut
         df_kaset_final = df_kaset_final[(df_kaset_final['CABANG'].str.strip() != "") & (df_kaset_final['CABANG'].notna()) & (df_kaset_final['CABANG'].str.upper() != "CABANG")]
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1:
             st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Pakai fungsi unik agar tidak error
             df_sp_clean = make_unique_df(df_sp_raw.iloc[0:10, 0:22])
             st.dataframe(df_sp_clean, use_container_width=True, hide_index=True)
 
@@ -875,21 +871,16 @@ elif st.session_state['app_mode'] == 'main':
                     except: pass
             st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
-       with tab3:
+        with tab3:
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                # TARGET: A23:F27
-                # Baris 23 (Excel) = Index 22
-                # Baris 27 (Excel) = Index 27 (Batas bawah)
-                # Kolom A:F = Index 0:6
+                # TARGET A23:F27 (Excel 23 = Index 22)
                 df_rsk = make_unique_df(df_sp_raw.iloc[22:27, 0:6])
                 st.dataframe(df_rsk, use_container_width=True, hide_index=True)
-                
             with c2:
                 st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                # Kalau PM Kaset biasanya di bawahnya, misal A29:G36
-                # Aku sesuaikan koordinatnya agar tidak bentrok dengan Rekap Rusak
+                # Target Baris 32 (Excel) = Index 31
                 df_pm = make_unique_df(df_sp_raw.iloc[31:39, 0:7])
                 st.dataframe(df_pm, use_container_width=True, hide_index=True)
 
@@ -1226,6 +1217,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
