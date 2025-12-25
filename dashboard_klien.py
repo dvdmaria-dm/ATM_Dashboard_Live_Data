@@ -341,7 +341,7 @@ elif st.session_state['app_mode'] == 'main':
             df_raw = df[df[col_status] == 'TID MRI'].copy() if col_status in df.columns else pd.DataFrame()
             df_target = df_raw[df_raw['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
             cat_label = "PROJECT MRI"
-        elif h_cat == Sparepart&kaset:
+        elif h_cat == 'SparePart & Kaset':
             df_target = pd.DataFrame(); cat_label = "SPAREPART"
         else:
             df_target = df[df['KATEGORI'] == h_cat].copy()
@@ -642,7 +642,7 @@ elif st.session_state['app_mode'] == 'main':
 
     with nav_col:
         st.markdown("""<style>div[role="radiogroup"] { justify-content: flex-start !important; flex-wrap: nowrap !important; width: 100% !important; } div[role="radiogroup"] label { white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', Sparepart&kaset]
+        menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'SparePart & Kaset']
         # Tambahkan key="nav_cat" agar Header di atas bisa membacanya
         sel_cat = st.radio("Navigasi:", menu_items, index=0, horizontal=True, label_visibility="collapsed", key="nav_cat")
 
@@ -660,7 +660,7 @@ elif st.session_state['app_mode'] == 'main':
     sel_mon = ""; prev_mon = ""; curr_mon_short = ""; prev_mon_short = ""; sort_week = "All Week"; comp_mode = ""
     use_color = False 
 
-    if sel_cat != Sparepart&kaset:
+    if sel_cat != 'SparePart & Kaset':
         with filter_col:
             # f1=Periode, f2=Week, f3=Trend, f4=Warna, f5=Mode
             f1, f2, f3, f4, f5 = st.columns([1.4, 1.2, 1.0, 0.6, 0.7], gap="small")
@@ -706,12 +706,12 @@ elif st.session_state['app_mode'] == 'main':
         df_prev_raw = df[(df['BULAN_EN'] == prev_mon) & (df[col_status] == 'TID MRI')].copy() if prev_mon and col_status in df.columns else pd.DataFrame()
         df_prev = df_prev_raw[df_prev_raw['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
 
-    elif sel_cat == Sparepart&kaset: pass
+    elif sel_cat == 'SparePart & Kaset': pass
     else:
         df_curr = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
         if prev_mon: df_prev = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy()
 
-    if sel_cat != 'Sparepart&kaset' and sort_week != 'All Week':
+    if sel_cat != 'SparePart & Kaset' and sort_week != 'All Week':
         week_map = {'W1': 1, 'W2': 2, 'W3': 3, 'W4': 4}
         limit_num = week_map.get(sort_week, 4)
         if not df_curr.empty and 'WEEK' in df_curr.columns:
@@ -725,10 +725,10 @@ elif st.session_state['app_mode'] == 'main':
     else:
         total_ticket = len(df_curr)
 
-    avg_ticket = total_ticket / 4 if sel_cat != Sparepart&kaset else 0
+    avg_ticket = total_ticket / 4 if sel_cat != 'SparePart & Kaset' else 0
 
     # --- MICRO METRICS SECTION (FIXED: COMPLAIN DIHITUNG SUM) ---
-    if sel_cat != Sparepart&kaset:
+    if sel_cat != 'SparePart & Kaset':
         if sel_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
             df_raw_mri = df[(df['BULAN_EN'] == sel_mon) & (df[col_status] == 'TID MRI')].copy() if col_status in df.columns else pd.DataFrame()
@@ -827,84 +827,58 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
+
     # =========================================================================
-    # 1. LAYOUT KHUSUS: Sparepart&kaset (NAMA SUDAH DIPERBAIKI)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET
     # =========================================================================
-    # Perhatikan: string di bawah ini sekarang persis 'Sparepart&kaset'
-    if sel_cat == 'Sparepart&kaset':
+    if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        
-        # Helper Data Custom (X1:AI10)
-        def get_custom_data(r_header_idx, r_data_stop_idx, c_start_idx, c_end_idx):
-            try:
-                if not df_sp_raw.empty:
-                    # Cek ketersediaan kolom
-                    if df_sp_raw.shape[1] < c_start_idx:
-                        return pd.DataFrame(columns=[f"Error: Sheet 'Sparepart&kaset' terbaca, tapi kolom kurang (Cuma {df_sp_raw.shape[1]})"])
-
-                    # 1. AMBIL HEADER
-                    header_row = df_sp_raw.iloc[r_header_idx, c_start_idx:c_end_idx]
-                    raw_headers = header_row.astype(str).str.strip().tolist()
-                    
-                    # 2. BERSIHKAN HEADER
-                    final_headers = []
-                    seen_counts = {}
-                    for col in raw_headers:
-                        if col.lower() in ['nan', 'none', '']: col = "Info"
-                        if col in seen_counts:
-                            seen_counts[col] += 1
-                            final_headers.append(f"{col}_{seen_counts[col]}")
-                        else:
-                            seen_counts[col] = 0
-                            final_headers.append(col)
-                    
-                    # 3. AMBIL DATA
-                    data_values = df_sp_raw.iloc[r_header_idx+1 : r_data_stop_idx, c_start_idx:c_end_idx].values
-                    
-                    # 4. BUAT TABEL
-                    new_df = pd.DataFrame(data_values, columns=final_headers)
-                    return clean_zeros(new_df)
-            except Exception as e:
-                return pd.DataFrame(columns=[f"Error Script: {str(e)}"])
+        def get_sp_slice(r_start, r_end, c_end):
+            if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end and df_sp_raw.shape[1] >= c_end:
+                subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
+                headers = subset.iloc[0].astype(str).tolist()
+                seen_counts = {}; final_cols = []
+                for col in headers:
+                    col = col.strip(); col = "Info" if col == "" else col
+                    if col in seen_counts: seen_counts[col] += 1; col = f"{col}_{seen_counts[col]}"
+                    else: seen_counts[col] = 0
+                    final_cols.append(col)
+                subset.columns = final_cols; return clean_zeros(subset[1:])
             return pd.DataFrame()
-
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
-        
-        with tab1: 
-            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Sparepart asumsi masih di A1:V10 (Aman)
-            st.dataframe(get_custom_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
-            
+        with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
         with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (X1:AI10)</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
+            # LOGIKA BARU: HANYA FORMAT PERSEN JIKA NILAINYA KECIL (<= 1.5)
+            # Ini mencegah angka "29" berubah jadi "2900%"
+            df_kaset = get_sp_slice(11, 22, 12)
             
-            # --- UJI COBA KOORDINAT X1:AI10 ---
-            # Row 0-10, Kolom 23 (X) - 35 (AI)
-            
-            df_kaset = get_custom_data(0, 10, 23, 35) 
-            
-            if not df_kaset.empty and "Error" not in df_kaset.columns[0]:
+            if not df_kaset.empty:
+                # 1. Bersihkan Header yang "Info", "Info_1" agar lebih enak dilihat (Opsional)
+                # Kalau mau header asli dari Excel, pastikan baris ke-12 di Google Sheets tidak kosong.
+                
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper(): continue
+                    # Lewati kolom pertama (biasanya Nama Cabang)
+                    if col == df_kaset.columns[0]: continue
+                    
                     try:
-                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
-                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
+                        # Coba ubah ke angka
+                        s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
                         
-                        df_kaset[col] = s_numeric.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
-                    except: pass
-                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            else:
-                st.warning("⚠️ Data Kosong / Salah Sheet")
-                st.write("Coba cek: Apakah nama sheet di `load_data` bagian atas script sudah diganti jadi `Sparepart&kaset`?")
-
+                        # FUNGSI PINTAR:
+                        # Jika angkanya <= 1.5 (misal 0.99), jadikan persen (99%).
+                        # Jika angkanya > 1.5 (misal 29), BIARKAN ANGKA BIASA.
+                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else ""))
+                    except: 
+                        pass
+            
+            st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+            
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(24, 29, 0, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_custom_data(31, 38, 0, 7), use_container_width=True, hide_index=True)
-  
-   
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(24, 28, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(31, 36, 7), use_container_width=True, hide_index=True)
+
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
     # =========================================================================
@@ -1237,25 +1211,6 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
