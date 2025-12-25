@@ -828,30 +828,44 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL STRICT - A12:M21)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL ANTI-CRASH A12:M21)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper Super Ketat (Sesuai Koordinat)
-        def get_strict_data(r_start_idx, r_end_idx, c_end_idx):
+        # Fungsi Helper dengan PENANGKAL ERROR DUPLIKAT
+        def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx):
             try:
-                # Pastikan data sheet ada
                 if not df_sp_raw.empty:
-                    # POTONG SESUAI KOORDINAT
-                    # r_start_idx = 11 (Excel Baris 12)
-                    # r_end_idx   = 21 (Excel Baris 21) -> Python iloc berhenti SEBELUM angka ini, jadi index 20 (Baris 21) masuk.
-                    # c_end_idx   = 13 (Kolom A s/d M)
-                    
+                    # POTONG SESUAI KOORDINAT (A12:M21)
+                    # Baris: 11 s/d 21 (Python Index)
+                    # Kolom: 0 s/d 13 (A s/d M)
                     subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
                     
-                    # Baris pertama (Excel 12) adalah Header
-                    headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    subset.columns = headers
+                    # 1. AMBIL HEADER MENTAH
+                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
                     
-                    # Data adalah sisa barisnya (Excel 13 s/d 21)
+                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (INI YANG BIKIN ERROR HILANG)
+                    final_headers = []
+                    seen_counts = {}
+                    
+                    for col in raw_headers:
+                        # Jika nama kolom kosong/nan, ganti jadi "Info"
+                        if col.lower() in ['nan', 'none', '']:
+                            col = "Info"
+                            
+                        if col in seen_counts:
+                            seen_counts[col] += 1
+                            final_headers.append(f"{col}_{seen_counts[col]}") # Tambah _1, _2 dst
+                        else:
+                            seen_counts[col] = 0
+                            final_headers.append(col)
+                    
+                    # 3. PASANG HEADER BARU YANG SUDAH AMAN
+                    subset.columns = final_headers
+                    
+                    # 4. AMBIL DATA
                     data_only = subset[1:]
-                    
                     return clean_zeros(data_only)
             except: pass
             return pd.DataFrame()
@@ -860,23 +874,22 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Sparepart (Asumsi A1:V10)
-            st.dataframe(get_strict_data(0, 10, 22), use_container_width=True, hide_index=True)
+            st.dataframe(get_strict_data_safe(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- EKSEKUSI KOORDINAT A12:M21 ---
+            # --- EKSEKUSI A12:M21 DENGAN PENGAMAN ---
             # Start: 11 (Header Excel 12)
             # End: 21 (Data Excel 21)
             # Cols: 13 (A s/d M)
             
-            df_kaset = get_strict_data(11, 21, 13) 
+            df_kaset = get_strict_data_safe(11, 21, 13) 
             
             if not df_kaset.empty:
-                # FORMAT PERSEN
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper(): continue
+                    # Lewati kolom Cabang atau Info tambahan
+                    if "CABANG" in col.upper() or "INFO" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
                         s_numeric = pd.to_numeric(clean_val, errors='coerce')
@@ -892,9 +905,8 @@ elif st.session_state['app_mode'] == 'main':
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Koordinat Tabel Bawah disesuaikan agar tidak bentrok
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data(24, 29, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data(31, 38, 7), use_container_width=True, hide_index=True)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(24, 29, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(31, 38, 7), use_container_width=True, hide_index=True)
   
    
     # =========================================================================
@@ -1229,6 +1241,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
