@@ -828,50 +828,35 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - AUTO CLEAN)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL PRESISI)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper Cerdas: Ambil Header Asli & Buang Baris Kosong
-        def get_smart_data(r_header_idx, r_end_idx, c_end_idx):
+        def get_precise_data(r_header_idx, r_end_idx, c_end_idx):
             try:
-                # Kita ambil range LEBIH LEBAR (buffer) biar Kupang tidak ketinggalan
-                # r_header_idx = Index Baris Header (Excel Baris 12 = Index 11)
-                # r_end_idx    = Index Baris Akhir (Kita tembak lebih jauh dikit biar aman)
-                
                 if not df_sp_raw.empty and df_sp_raw.shape[0] > r_header_idx:
-                    # Ambil potongan data mentah
+                    # Ambil potongan data
                     subset = df_sp_raw.iloc[r_header_idx:r_end_idx, 0:c_end_idx]
                     
-                    # 1. HEADER PERSIS DARI SUMBER
-                    # Ambil baris pertama potongan sebagai header
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    # 1. HEADER MURNI (Sesuai List Abang)
+                    # Kita ambil baris pertama sebagai header APA ADANYA
+                    headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    subset.columns = headers
                     
-                    # --- SAFETY NET DUPLIKAT ---
-                    # (Hanya aktif jika abang lupa bikin nama unik di Excel, biar gak crash)
-                    seen = {}
-                    final_headers = []
-                    for h in raw_headers:
-                        if h in seen:
-                            seen[h] += 1
-                            final_headers.append(f"{h}_{seen[h]}") # Terpaksa tambah angka kalau kembar
-                        else:
-                            seen[h] = 0
-                            final_headers.append(h) # Kalau unik, AMBIL PERSIS
-                    
-                    subset.columns = final_headers
-                    
-                    # 2. BUANG BARIS HEADER & BARIS KOSONG
+                    # 2. BUANG BARIS HEADER DARI DATA
                     data_only = subset[1:].copy()
                     
-                    # Filter Canggih: Hapus baris yang kolom pertamanya (CABANG) kosong/nan
-                    # Ini akan otomatis membuang "baris kosong 1" di bawah header itu.
-                    first_col = data_only.columns[0]
+                    # 3. FILTER SAMPAH (BARIS KOSONG & JUDUL BAWAH)
+                    # Kita cek kolom pertama (CABANG)
+                    col_1 = data_only.columns[0]
+                    
+                    # Buang jika: Kosong, NaN, None, atau berisi kata "REKAP"
                     data_only = data_only[
-                        (data_only[first_col].str.strip() != '') & 
-                        (data_only[first_col].str.lower() != 'nan') &
-                        (data_only[first_col].str.lower() != 'none')
+                        (data_only[col_1].str.strip() != '') & 
+                        (data_only[col_1].str.lower() != 'nan') &
+                        (data_only[col_1].str.lower() != 'none') &
+                        (~data_only[col_1].astype(str).str.contains("REKAP", case=False, na=False))
                     ]
                     
                     return clean_zeros(data_only)
@@ -882,22 +867,21 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_smart_data(0, 11, 22), use_container_width=True, hide_index=True)
+            st.dataframe(get_precise_data(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- LOGIKA JARIMG LEBAR ---
-            # Excel Header: Baris 12 (Index 11)
-            # Excel Data: Sampai Baris 25 (Index 25) -> Kita lebihkan biar Kupang ketangkap
-            # Kolom: A sampai L (12 Kolom)
+            # --- LOGIKA FINAL ---
+            # Header: Baris 12 (Index 11)
+            # Data: Kita tarik sampai Baris 24 (Index 24) -> Cukup untuk Kupang, tapi sebelum tabel bawah
+            # Kolom: 12 Kolom (A-L)
             
-            df_kaset = get_smart_data(11, 26, 12) 
+            df_kaset = get_precise_data(11, 24, 12) 
             
             if not df_kaset.empty:
-                # FORMAT PERSEN PINTAR
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper() or "KOTA" in col.upper(): continue
+                    if "CABANG" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
                         s_numeric = pd.to_numeric(clean_val, errors='coerce')
@@ -909,12 +893,14 @@ elif st.session_state['app_mode'] == 'main':
                 
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Stock Kaset tidak ditemukan. Cek range di script.")
+                st.info("Data Stock Kaset tidak ditemukan.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(24, 30, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(31, 38, 7), use_container_width=True, hide_index=True)
+            # Monitoring Kaset Rusak (Tabel Bawah)
+            # Karena tabel atas tadi sampai baris 24 (REKAP di baris 25/26), kita mulai ini dari 24
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_precise_data(24, 29, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_precise_data(31, 38, 7), use_container_width=True, hide_index=True)
   
    
     # =========================================================================
@@ -1249,6 +1235,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
