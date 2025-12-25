@@ -828,82 +828,58 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
 
-    # =========================================================================
-    # 1. LAYOUT KHUSUS: Sparepart & Kaset (KOORDINAT PRESISI A12:L21)
-    # =========================================================================
-    if sel_cat == 'Sparepart & Kaset':
-        # Style agar tabel scannable dan rapi
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; color: #1E293B !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
-        
-        # Fungsi Helper Ambil Data Koordinat
-        def get_exact_table(start_row, end_row, start_col, end_col):
-            try:
-                if not df_sp_raw.empty:
-                    # Potong data A12:L21 (Index 11 sampai 21)
-                    subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
-                    
-                    # Ambil Baris Pertama sebagai Header
-                    headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    
-                    # Bersihkan Header Duplicate (Anti-Crash)
-                    final_headers = []
-                    seen = {}
-                    for h in headers:
-                        name = h if h.lower() not in ['nan', '', 'none'] else "Info"
-                        if name in seen:
-                            seen[name] += 1
-                            final_headers.append(f"{name}_{seen[name]}")
-                        else:
-                            seen[name] = 0
-                            final_headers.append(name)
-                    
-                    # Buat DataFrame Baru
-                    res_df = pd.DataFrame(subset.values[1:], columns=final_headers)
-                    return clean_zeros(res_df)
-            except: pass
-            return pd.DataFrame()
+    # --- CARI BAGIAN LOGIKA MENU UTAMA ---
 
-        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
-        
-        with tab1: 
-            st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # A1:V10 (Index 0:10, 0:22)
-            st.dataframe(get_exact_table(0, 10, 0, 22), use_container_width=True, hide_index=True)
-            
-        with tab2: 
-            st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # --- EKSEKUSI STRICT A12:L21 ---
-            df_kaset = get_exact_table(11, 21, 0, 12) 
-            
-            if not df_kaset.empty:
-                for col in df_kaset.columns:
-                    if "CABANG" in col.upper(): continue
-                    try:
-                        # Logika Format Persen Pintar
-                        clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
-                        s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                        df_kaset[col] = s_numeric.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
-                    except: pass
-                st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            else:
-                st.info("Data Kaset A12:L21 Kosong.")
+if sel_cat == 'Sparepart & Kaset':
+    # 1. STYLE TABEL
+    st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }</style>""", unsafe_allow_html=True)
+    
+    # 2. FUNGSI AMBIL DATA (A12:L21)
+    def get_final_table(start_row, end_row, start_col, end_col):
+        try:
+            if not df_sp_raw.empty:
+                subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
+                headers = subset.iloc[0].astype(str).str.strip().tolist()
+                final_headers = []
+                seen = {}
+                for h in headers:
+                    name = h if h.lower() not in ['nan', '', 'none'] else "Info"
+                    if name in seen:
+                        seen[name] += 1
+                        final_headers.append(f"{name}_{seen[name]}")
+                    else:
+                        seen[name] = 0
+                        final_headers.append(name)
+                return pd.DataFrame(subset.values[1:], columns=final_headers)
+        except: pass
+        return pd.DataFrame()
 
-        with tab3:
-            c1, c2 = st.columns(2)
-            # Rekap Rusak A25:F30
-            with c1: 
-                st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                st.dataframe(get_exact_table(24, 30, 0, 6), use_container_width=True, hide_index=True)
-            # PM Kaset A32:G39
-            with c2: 
-                st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                st.dataframe(get_exact_table(31, 39, 0, 7), use_container_width=True, hide_index=True)
+    # 3. TAMPILKAN TAB
+    t1, t2, t3 = st.tabs(["🛠️ Sparepart", "📼 Kaset", "⚠️ Monitoring"])
+    with t1: st.dataframe(get_final_table(0, 10, 0, 22), use_container_width=True, hide_index=True)
+    with t2: 
+        df_kaset = get_final_table(11, 21, 0, 12) # TARGET A12:L21
+        # Format Persen Sederhana
+        for col in df_kaset.columns:
+            if "CABANG" not in col.upper():
+                try:
+                    df_kaset[col] = pd.to_numeric(df_kaset[col].astype(str).str.replace('%',''), errors='coerce').apply(lambda x: f"{x:.0%}" if x <= 1.5 else f"{x:.0f}")
+                except: pass
+        st.dataframe(df_kaset, use_container_width=True, hide_index=True)
+    with t3:
+        st.dataframe(get_final_table(24, 30, 0, 6), use_container_width=True, hide_index=True)
 
-        # ⛔ REM PAKEM: BERHENTI DI SINI
-        # Perintah ini mutlak perlu supaya Python tidak lanjut ke baris 1048 yang bikin Error WEEK
-        st.stop()
+    # ⛔ REM TANGAN PALING PAKEM
+    st.stop()
+
+# --- JANGAN KASIH CELAH ---
+# Baris di bawah ini HANYA boleh jalan kalau sel_cat BUKAN Sparepart
+else:
+    # Semua kode performance kau (Termasuk baris 1049 itu)
+    # Masukkan semua kode sisa dashboard kau ke dalam blok 'else' ini
+    
+    # ... kode-kode performance ...
+    # val = get_val_std(df_curr[df_curr['WEEK'] == w]) <--- Pastikan ini ada di dalam 'else'
     
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1237,6 +1213,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
