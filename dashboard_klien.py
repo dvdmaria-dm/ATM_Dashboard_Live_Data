@@ -341,7 +341,7 @@ elif st.session_state['app_mode'] == 'main':
             df_raw = df[df[col_status] == 'TID MRI'].copy() if col_status in df.columns else pd.DataFrame()
             df_target = df_raw[df_raw['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
             cat_label = "PROJECT MRI"
-        elif h_cat == 'SparePart & Kaset':
+        elif h_cat == Sparepart&kaset:
             df_target = pd.DataFrame(); cat_label = "SPAREPART"
         else:
             df_target = df[df['KATEGORI'] == h_cat].copy()
@@ -642,7 +642,7 @@ elif st.session_state['app_mode'] == 'main':
 
     with nav_col:
         st.markdown("""<style>div[role="radiogroup"] { justify-content: flex-start !important; flex-wrap: nowrap !important; width: 100% !important; } div[role="radiogroup"] label { white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'SparePart & Kaset']
+        menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', Sparepart&kaset]
         # Tambahkan key="nav_cat" agar Header di atas bisa membacanya
         sel_cat = st.radio("Navigasi:", menu_items, index=0, horizontal=True, label_visibility="collapsed", key="nav_cat")
 
@@ -660,7 +660,7 @@ elif st.session_state['app_mode'] == 'main':
     sel_mon = ""; prev_mon = ""; curr_mon_short = ""; prev_mon_short = ""; sort_week = "All Week"; comp_mode = ""
     use_color = False 
 
-    if sel_cat != 'SparePart & Kaset':
+    if sel_cat != Sparepart&kaset:
         with filter_col:
             # f1=Periode, f2=Week, f3=Trend, f4=Warna, f5=Mode
             f1, f2, f3, f4, f5 = st.columns([1.4, 1.2, 1.0, 0.6, 0.7], gap="small")
@@ -706,12 +706,12 @@ elif st.session_state['app_mode'] == 'main':
         df_prev_raw = df[(df['BULAN_EN'] == prev_mon) & (df[col_status] == 'TID MRI')].copy() if prev_mon and col_status in df.columns else pd.DataFrame()
         df_prev = df_prev_raw[df_prev_raw['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
 
-    elif sel_cat == 'SparePart & Kaset': pass
+    elif sel_cat == Sparepart&kaset: pass
     else:
         df_curr = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
         if prev_mon: df_prev = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy()
 
-    if sel_cat != 'SparePart & Kaset' and sort_week != 'All Week':
+    if sel_cat != 'Sparepart&kaset' and sort_week != 'All Week':
         week_map = {'W1': 1, 'W2': 2, 'W3': 3, 'W4': 4}
         limit_num = week_map.get(sort_week, 4)
         if not df_curr.empty and 'WEEK' in df_curr.columns:
@@ -725,10 +725,10 @@ elif st.session_state['app_mode'] == 'main':
     else:
         total_ticket = len(df_curr)
 
-    avg_ticket = total_ticket / 4 if sel_cat != 'SparePart & Kaset' else 0
+    avg_ticket = total_ticket / 4 if sel_cat != Sparepart&kaset else 0
 
     # --- MICRO METRICS SECTION (FIXED: COMPLAIN DIHITUNG SUM) ---
-    if sel_cat != 'SparePart & Kaset':
+    if sel_cat != Sparepart&kaset:
         if sel_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
             df_raw_mri = df[(df['BULAN_EN'] == sel_mon) & (df[col_status] == 'TID MRI')].copy() if col_status in df.columns else pd.DataFrame()
@@ -1237,6 +1237,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
