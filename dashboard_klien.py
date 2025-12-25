@@ -487,7 +487,7 @@ elif st.session_state['app_mode'] == 'main':
         st.markdown("""
         <div style="line-height: 1.1;">
             <div class="main-title" style="font-size: 30px !important;">MONITORING PERFORMANCE</div>
-            <div class="sub-title" style="font-size: 14px !important; margin-top: -2px; color: #64748B;">PT KELOLA JASA ARTA - EXECUTIVE DASHBOARD</div>
+            <div class="sub-title" style="font-size: 14px !important; margin-top: -2px; color: #64748B;">PT KELOLA JASA ARTA</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1202,3 +1202,4 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
