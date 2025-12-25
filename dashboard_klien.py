@@ -829,43 +829,64 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (A12:L21 - FIX HEADER)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (A12:L21 - MANUAL HEADER FIX)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # 1. AMBIL POTONGAN A12:L21 (Index 11 sampai 21)
+        # 1. AMBIL DATA A12:L21 (Index 11 s/d 21)
+        # Kita ambil isinya saja (.values), headernya kita bikin sendiri
         subset_kaset = df_sp_raw.iloc[11:21, 0:12]
         
-        # 2. HEADER DIAMBIL DARI BARIS 12 (Index 0 dari subset)
-        header_kaset = subset_kaset.iloc[0].tolist()
+        # 2. DEFINISIKAN HEADER MANUAL (Sesuai yang kau kirim tadi)
+        # Ini supaya Python tidak sok tahu ambil header dari baris yang salah
+        manual_headers = [
+            "CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT",
+            "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT",
+            "W2 DEC GOOD CURRENT", "W2 DEC GOOD REJECT",
+            "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT",
+            "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"
+        ]
         
-        # 3. DATA DIAMBIL DARI BARIS 13-21
-        data_kaset = subset_kaset.values[1:]
-        
-        # 4. BUAT TABEL
-        df_kaset_final = pd.DataFrame(data_kaset, columns=header_kaset)
+        # 3. BUAT DATAFRAME BARU
+        # Jika baris 12 di Excel kau adalah header, maka datanya mulai dari baris 13 (Index 1)
+        df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
         
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1:
+            st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
             # Sparepart A1:V10
             sub_sp = df_sp_raw.iloc[0:10, 0:22]
             st.dataframe(pd.DataFrame(sub_sp.values[1:], columns=sub_sp.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
         with tab2:
-            st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # Tampilkan apa adanya tanpa format persen dulu biar kita lihat headernya bener gak
+            st.markdown('<div class="section-header">📼 Ketersediaan Kaset (Manual Header Mode)</div>', unsafe_allow_html=True)
+            
+            # --- FORMATTING PERSEN & ANGKA ---
+            for col in df_kaset_final.columns:
+                if "CABANG" not in col:
+                    try:
+                        # Bersihkan data dan ubah ke angka
+                        s = df_kaset_final[col].astype(str).str.replace('%', '').str.strip()
+                        n = pd.to_numeric(s, errors='coerce')
+                        
+                        # Aturan: Jika <= 1.5 anggap persen, jika > 1.5 anggap angka bulat
+                        df_kaset_final[col] = n.apply(
+                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
+                        )
+                    except: pass
+            
             st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
         with tab3:
             c1, c2 = st.columns(2)
             with c1:
-                # Rekap Kaset Rusak (Baris 25)
+                st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
                 sub_rsk = df_sp_raw.iloc[24:30, 0:6]
                 st.dataframe(pd.DataFrame(sub_rsk.values[1:], columns=sub_rsk.iloc[0].tolist()), use_container_width=True, hide_index=True)
             with c2:
-                # PM Kaset (Baris 32)
+                st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
                 sub_pm = df_sp_raw.iloc[31:39, 0:7]
                 st.dataframe(pd.DataFrame(sub_pm.values[1:], columns=sub_pm.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
@@ -1201,6 +1222,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
