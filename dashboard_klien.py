@@ -849,20 +849,29 @@ elif st.session_state['app_mode'] == 'main':
         with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # LOGIKA FORMAT PERSEN KHUSUS STOCK KASET
+            # LOGIKA BARU: HANYA FORMAT PERSEN JIKA NILAINYA KECIL (<= 1.5)
+            # Ini mencegah angka "29" berubah jadi "2900%"
             df_kaset = get_sp_slice(11, 22, 12)
+            
             if not df_kaset.empty:
+                # 1. Bersihkan Header yang "Info", "Info_1" agar lebih enak dilihat (Opsional)
+                # Kalau mau header asli dari Excel, pastikan baris ke-12 di Google Sheets tidak kosong.
+                
                 for col in df_kaset.columns:
-                    # Lewati kolom CABANG/NAMA KOTA (biasanya kolom pertama)
-                    if "CABANG" in col.upper() or "KOTA" in col.upper() or col == df_kaset.columns[0]:
-                        continue
-                    # Konversi angka string ke float lalu format persen
-                    # Misal: "0.99" -> 0.99 -> "99%"
-                    # Misal: "1" -> 1.0 -> "100%"
+                    # Lewati kolom pertama (biasanya Nama Cabang)
+                    if col == df_kaset.columns[0]: continue
+                    
                     try:
+                        # Coba ubah ke angka
                         s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
-                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if pd.notnull(x) else "")
-                    except: pass
+                        
+                        # FUNGSI PINTAR:
+                        # Jika angkanya <= 1.5 (misal 0.99), jadikan persen (99%).
+                        # Jika angkanya > 1.5 (misal 29), BIARKAN ANGKA BIASA.
+                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else ""))
+                    except: 
+                        pass
+            
             st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             
         with tab3:
@@ -1202,4 +1211,5 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
