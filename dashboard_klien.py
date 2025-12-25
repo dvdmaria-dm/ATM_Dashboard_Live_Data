@@ -829,58 +829,56 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: Sparepart&kaset (KOORDINAT A12:L21)
+    # 1. LAYOUT KHUSUS: Sparepart & Kaset (NAMA MENU DISESUAIKAN)
     # =========================================================================
-    if sel_cat == 'Sparepart&kaset':
-        # Style Header Tabel
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
+    # Nama di bawah ini HARUS SAMA PERSIS dengan yang ada di pilihan Sidebar kau
+    if sel_cat == 'Sparepart & Kaset':
+        # Style Tabel agar scannable
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; color: #1E293B !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi ambil data berdasarkan koordinat
-        def get_table_data(start_row, end_row, start_col, end_col):
+        # Fungsi Helper Ambil Data Koordinat
+        def get_exact_table(start_row, end_row, start_col, end_col):
             try:
+                # Kita pakai df_sp_raw yang sudah dimuat dari sheet 'Sparepart&kaset'
                 if not df_sp_raw.empty:
-                    # Ambil potongan data (Slicing)
+                    # Koordinat A12:L21 (Index 11 sampai 21)
                     subset = df_sp_raw.iloc[start_row:end_row, start_col:end_col]
                     
-                    # 1. Ambil Baris Pertama sebagai Header
-                    raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
+                    # Ambil Baris Pertama sebagai Header
+                    headers = subset.iloc[0].astype(str).str.strip().tolist()
                     
-                    # 2. Pengaman Header (Nama Unik)
+                    # Bersihkan Header Duplicate agar tidak Error
                     final_headers = []
                     seen = {}
-                    for col in raw_headers:
-                        val = col if col.lower() not in ['nan', '', 'none'] else "Info"
-                        if val in seen:
-                            seen[val] += 1
-                            final_headers.append(f"{val}_{seen[val]}")
+                    for h in headers:
+                        name = h if h.lower() not in ['nan', '', 'none'] else "Info"
+                        if name in seen:
+                            seen[name] += 1
+                            final_headers.append(f"{name}_{seen[name]}")
                         else:
-                            seen[val] = 0
-                            final_headers.append(val)
+                            seen[name] = 0
+                            final_headers.append(name)
                     
-                    # 3. Buat DataFrame Baru yang Bersih
-                    new_df = pd.DataFrame(subset.values[1:], columns=final_headers)
-                    return clean_zeros(new_df)
-            except: pass
+                    # Buat DataFrame Baru
+                    res_df = pd.DataFrame(subset.values[1:], columns=final_headers)
+                    return clean_zeros(res_df)
+            except Exception as e:
+                return pd.DataFrame()
             return pd.DataFrame()
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1: 
-            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # A1:V10 -> Index (0:10, 0:22)
-            st.dataframe(get_table_data(0, 10, 0, 22), use_container_width=True, hide_index=True)
+            st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
+            # Koordinat A1:V10
+            st.dataframe(get_exact_table(0, 10, 0, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            
-            # --- TARGET: A12:L21 ---
-            # Baris 12 (Excel) = Index 11
-            # Baris 21 (Excel) = Index 21
-            # Kolom A s/d L = Index 0 s/d 12
-            df_kaset = get_table_data(11, 21, 0, 12) 
+            st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
+            # --- EKSEKUSI A12:L21 ---
+            df_kaset = get_exact_table(11, 21, 0, 12) 
             
             if not df_kaset.empty:
-                # Format Persen & Angka
                 for col in df_kaset.columns:
                     if "CABANG" in col.upper(): continue
                     try:
@@ -892,21 +890,20 @@ elif st.session_state['app_mode'] == 'main':
                     except: pass
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Kaset di A12:L21 tidak terbaca.")
+                st.info("Data Kaset A12:L21 tidak ditemukan. Cek kembali koordinat di Google Sheets.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Rekap Rusak (A25:F30) -> Index (24:30, 0:6)
+            # Rekap Rusak A25:F30
             with c1: 
-                st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                st.dataframe(get_table_data(24, 30, 0, 6), use_container_width=True, hide_index=True)
-            # PM Kaset (A32:G39) -> Index (31:39, 0:7)
+                st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
+                st.dataframe(get_exact_table(24, 30, 0, 6), use_container_width=True, hide_index=True)
+            # PM Kaset A32:G39
             with c2: 
-                st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                st.dataframe(get_table_data(31, 39, 0, 7), use_container_width=True, hide_index=True)
+                st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
+                st.dataframe(get_exact_table(31, 39, 0, 7), use_container_width=True, hide_index=True)
 
-        # AGAR TIDAK ERROR 'WEEK'
-        # Kita hentikan proses script di sini agar tidak lanjut ke logika filter WEEK di bawah
+        # ⛔ BERHENTI DI SINI agar tidak lari ke Error WEEK di baris bawah
         st.stop()
     
     # =========================================================================
@@ -1241,6 +1238,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
