@@ -829,61 +829,43 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (A12:L21 - MURNI DARI SUMBER)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (A12:L21 - FIX HEADER)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # 1. AMBIL POTONGAN MURNI A12:L21
-        # Index 11 adalah Baris 12 Excel
-        # Index 21 adalah batas bawah (Baris 21)
-        # 0:12 adalah Kolom A sampai L
+        # 1. AMBIL POTONGAN A12:L21 (Index 11 sampai 21)
         subset_kaset = df_sp_raw.iloc[11:21, 0:12]
         
-        # 2. AMBIL HEADER LANGSUNG DARI BARIS 12 (Tanpa modifikasi!)
+        # 2. HEADER DIAMBIL DARI BARIS 12 (Index 0 dari subset)
         header_kaset = subset_kaset.iloc[0].tolist()
         
-        # 3. AMBIL DATA DARI BARIS 13 SAMPAI 21
+        # 3. DATA DIAMBIL DARI BARIS 13-21
         data_kaset = subset_kaset.values[1:]
         
-        # 4. BENTUK DATAFRAME
+        # 4. BUAT TABEL
         df_kaset_final = pd.DataFrame(data_kaset, columns=header_kaset)
         
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1:
-            st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
             # Sparepart A1:V10
             sub_sp = df_sp_raw.iloc[0:10, 0:22]
             st.dataframe(pd.DataFrame(sub_sp.values[1:], columns=sub_sp.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
         with tab2:
             st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            
-            # Formating Angka & Persen (Agar tidak muncul banyak desimal)
-            for col in df_kaset_final.columns:
-                if col and "CABANG" not in str(col).upper():
-                    try:
-                        # Bersihkan simbol persen jika ada
-                        val_clean = df_kaset_final[col].astype(str).str.replace('%', '').str.strip()
-                        numeric_val = pd.to_numeric(val_clean, errors='coerce')
-                        
-                        # Jika angka <= 1.5 kita anggap persen (misal 0.95 -> 95%)
-                        df_kaset_final[col] = numeric_val.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
-                    except: pass
-            
+            # Tampilkan apa adanya tanpa format persen dulu biar kita lihat headernya bener gak
             st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
         with tab3:
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
+                # Rekap Kaset Rusak (Baris 25)
                 sub_rsk = df_sp_raw.iloc[24:30, 0:6]
                 st.dataframe(pd.DataFrame(sub_rsk.values[1:], columns=sub_rsk.iloc[0].tolist()), use_container_width=True, hide_index=True)
             with c2:
-                st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
+                # PM Kaset (Baris 32)
                 sub_pm = df_sp_raw.iloc[31:39, 0:7]
                 st.dataframe(pd.DataFrame(sub_pm.values[1:], columns=sub_pm.iloc[0].tolist()), use_container_width=True, hide_index=True)
 
@@ -1219,6 +1201,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
