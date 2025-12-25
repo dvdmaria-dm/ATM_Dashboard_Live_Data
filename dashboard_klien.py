@@ -827,73 +827,41 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-    # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (MODE DIAGNOSA X1:AI10)
+   # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (MODE DETEKTIF / X-RAY)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #ffcccc !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
+        st.error("🕵️ MODE DETEKTIF: MENAMPILKAN DATA MENTAH DARI GOOGLE SHEETS")
         
-        with tab1: 
-            st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            # Tampilkan 10 baris pertama, 22 kolom pertama (A-V)
-            if not df_sp_raw.empty:
-                st.dataframe(df_sp_raw.iloc[0:10, 0:22], use_container_width=True, hide_index=True)
+        # 1. Tampilkan Info Ukuran Data
+        rows = df_sp_raw.shape[0] if not df_sp_raw.empty else 0
+        cols = df_sp_raw.shape[1] if not df_sp_raw.empty else 0
+        
+        st.write(f"📊 **Python melihat Data Sebesar:** {rows} Baris x {cols} Kolom")
+        st.write("Coba Abang perhatikan tabel di bawah ini. Apakah ini data yang benar atau data hantu?")
+
+        tab1, tab2 = st.tabs(["👁️ LIHAT DATA MENTAH (FULL)", "📍 LIHAT KOLOM X (KOORDINAT BARU)"])
+        
+        with tab1:
+            st.caption("Ini seluruh isi Sheet yang dibaca Python (Tanpa Filter):")
+            st.dataframe(df_sp_raw, use_container_width=True)
             
-        with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset (X1:AI10)</div>', unsafe_allow_html=True)
+        with tab2:
+            st.caption("Ini fokus ke Kolom X (Index 23) sampai AI (Index 34):")
             
-            # --- CEK JUMLAH KOLOM DULU ---
-            total_rows = df_sp_raw.shape[0] if not df_sp_raw.empty else 0
-            total_cols = df_sp_raw.shape[1] if not df_sp_raw.empty else 0
-            
-            # Kolom X itu index ke-23. Jadi minimal harus ada 24 kolom biar kebaca.
-            if total_cols < 24:
-                st.error(f"⚠️ MASALAH TERDETEKSI: Python cuma melihat {total_cols} kolom. Padahal Kolom X itu urutan ke-24.")
-                st.info("SOLUSI: Klik Titik Tiga di Pojok Kanan Atas -> Pilih 'Clear Cache'. Lalu Refresh.")
-                # Tampilkan data mentah biar Abang percaya
-                st.caption("Ini Data Mentah yang dilihat Python sekarang (Pasti kolom X nya belum masuk):")
-                st.dataframe(df_sp_raw)
+            if cols > 23:
+                # Coba ambil potongan X s/d AI tanpa header fancy
+                # Index 23 = Kolom X
+                # Index 35 = Batas kanan
+                slice_x = df_sp_raw.iloc[:, 23:35]
+                st.dataframe(slice_x, use_container_width=True)
             else:
-                # Kalo kolom cukup, kita potong X1:AI10
-                # Row 0-10, Col 23-35
-                try:
-                    subset = df_sp_raw.iloc[0:10, 23:35]
-                    
-                    # Ambil Header dari Baris Pertama potongan
-                    headers = subset.iloc[0].astype(str).str.strip().tolist()
-                    final_headers = []
-                    seen = {}
-                    for h in headers:
-                        if h in seen: seen[h]+=1; final_headers.append(f"{h}_{seen[h]}")
-                        else: seen[h]=0; final_headers.append(h)
-                    
-                    # Pasang Header & Data
-                    subset.columns = final_headers
-                    data_clean = subset[1:] # Ambil isinya
-                    
-                    # Format Persen
-                    for col in data_clean.columns:
-                        if "CABANG" in col.upper(): continue
-                        try:
-                            clean_val = data_clean[col].astype(str).str.replace('%', '').str.strip()
-                            s_numeric = pd.to_numeric(clean_val, errors='coerce')
-                            data_clean[col] = s_numeric.apply(
-                                lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                            )
-                        except: pass
+                st.error(f"⚠️ KOSONG! Python cuma melihat {cols} kolom. Kolom X (ke-24) tidak terjangkau.")
+                st.info("Kemungkinan penyebab: Load Data di bagian atas script salah target Sheet.")
 
-                    st.success(f"✅ Data Ditemukan di Kolom X (Index 23) sampai AI (Index 34)")
-                    st.dataframe(data_clean, use_container_width=True, hide_index=True)
-                
-                except Exception as e:
-                    st.error(f"Error Potong Data: {e}")
-
-        with tab3:
-            c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); 
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True);
+        st.warning("⚠️ Jika tabel di atas BUKAN data Abang, berarti fungsi 'load_data' di atas salah ambil Sheet.")
   
    
     # =========================================================================
@@ -1228,6 +1196,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
