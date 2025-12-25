@@ -706,16 +706,41 @@ elif st.session_state['app_mode'] == 'main':
         df_prev_raw = df[(df['BULAN_EN'] == prev_mon) & (df[col_status] == 'TID MRI')].copy() if prev_mon and col_status in df.columns else pd.DataFrame()
         df_prev = df_prev_raw[df_prev_raw['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
 
+    elif sel_cat == 'SparePart & Kaset': pass
+    else:
+        df_curr = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
+        if prev_mon: df_prev = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy()
+
+    if sel_cat != 'SparePart & Kaset' and sort_week != 'All Week':
+        week_map = {'W1': 1, 'W2': 2, 'W3': 3, 'W4': 4}
+        limit_num = week_map.get(sort_week, 4)
+        if not df_curr.empty and 'WEEK' in df_curr.columns:
+            df_curr['TEMP_W_NUM'] = df_curr['WEEK'].map(week_map).fillna(0)
+            df_curr = df_curr[df_curr['TEMP_W_NUM'] <= limit_num].copy()
+            df_curr.drop(columns=['TEMP_W_NUM'], inplace=True)
+
     # --- HITUNG TOTAL (Revisi: Jika Complain, Sum Kolom J) ---
     if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in df_curr.columns:
         total_ticket = int(df_curr['JUMLAH_COMPLAIN'].sum())
     else:
         total_ticket = len(df_curr)
 
+    avg_ticket = total_ticket / 4 if sel_cat != 'SparePart & Kaset' else 0
 
     # --- MICRO METRICS SECTION (FIXED: COMPLAIN DIHITUNG SUM) ---
+    if sel_cat != 'SparePart & Kaset':
+        if sel_cat == 'MRI Project':
+            col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
+            df_raw_mri = df[(df['BULAN_EN'] == sel_mon) & (df[col_status] == 'TID MRI')].copy() if col_status in df.columns else pd.DataFrame()
+            df_met = df_raw_mri[df_raw_mri['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
+            
+            df_prev_raw_mri = df[(df['BULAN_EN'] == prev_mon) & (df[col_status] == 'TID MRI')].copy() if prev_mon and col_status in df.columns else pd.DataFrame()
+            df_prev_met = df_prev_raw_mri[df_prev_raw_mri['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
+        else:
+            df_met = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
+            df_prev_met = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy() if prev_mon else pd.DataFrame()
 
-    # --- HITUNG METRIK (Revisi: Jika Complain, Sum Kolom J) ---
+        # --- HITUNG METRIK (Revisi: Jika Complain, Sum Kolom J) ---
         if sel_cat == 'Complain':
             total_t = int(df_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_met.columns else 0
             prev_t = int(df_prev_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_prev_met.columns else 0
@@ -1186,7 +1211,6 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
-
 
 
 
