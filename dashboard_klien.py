@@ -829,52 +829,42 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - AUTO CLEAN)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - KUPANG INCLUDED)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        # Fungsi Helper Cerdas: Ambil Header Asli & Buang Baris Kosong
-        def get_smart_data(r_header_idx, r_end_idx, c_end_idx):
+        # Fungsi Helper dengan PENANGKAL ERROR DUPLIKAT
+        def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx):
             try:
-                # Kita ambil range LEBIH LEBAR (buffer) biar Kupang tidak ketinggalan
-                # r_header_idx = Index Baris Header (Excel Baris 12 = Index 11)
-                # r_end_idx    = Index Baris Akhir (Kita tembak lebih jauh dikit biar aman)
-                
-                if not df_sp_raw.empty and df_sp_raw.shape[0] > r_header_idx:
-                    # Ambil potongan data mentah
-                    subset = df_sp_raw.iloc[r_header_idx:r_end_idx, 0:c_end_idx]
+                if not df_sp_raw.empty:
+                    # POTONG SESUAI KOORDINAT
+                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
                     
-                    # 1. HEADER PERSIS DARI SUMBER
-                    # Ambil baris pertama potongan sebagai header
+                    # 1. AMBIL HEADER MENTAH
                     raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
                     
-                    # --- SAFETY NET DUPLIKAT ---
-                    # (Hanya aktif jika abang lupa bikin nama unik di Excel, biar gak crash)
-                    seen = {}
+                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (ANTI CRASH)
                     final_headers = []
-                    for h in raw_headers:
-                        if h in seen:
-                            seen[h] += 1
-                            final_headers.append(f"{h}_{seen[h]}") # Terpaksa tambah angka kalau kembar
-                        else:
-                            seen[h] = 0
-                            final_headers.append(h) # Kalau unik, AMBIL PERSIS
+                    seen_counts = {}
                     
+                    for col in raw_headers:
+                        # Jika nama kolom kosong/nan, ganti jadi "Info"
+                        if col.lower() in ['nan', 'none', '']:
+                            col = "Info"
+                            
+                        if col in seen_counts:
+                            seen_counts[col] += 1
+                            final_headers.append(f"{col}_{seen_counts[col]}") 
+                        else:
+                            seen_counts[col] = 0
+                            final_headers.append(col)
+                    
+                    # 3. PASANG HEADER BARU
                     subset.columns = final_headers
                     
-                    # 2. BUANG BARIS HEADER & BARIS KOSONG
-                    data_only = subset[1:].copy()
-                    
-                    # Filter Canggih: Hapus baris yang kolom pertamanya (CABANG) kosong/nan
-                    # Ini akan otomatis membuang "baris kosong 1" di bawah header itu.
-                    first_col = data_only.columns[0]
-                    data_only = data_only[
-                        (data_only[first_col].str.strip() != '') & 
-                        (data_only[first_col].str.lower() != 'nan') &
-                        (data_only[first_col].str.lower() != 'none')
-                    ]
-                    
+                    # 4. AMBIL DATA
+                    data_only = subset[1:]
                     return clean_zeros(data_only)
             except: pass
             return pd.DataFrame()
@@ -883,22 +873,21 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_smart_data(0, 11, 22), use_container_width=True, hide_index=True)
+            st.dataframe(get_strict_data_safe(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- LOGIKA JARIMG LEBAR ---
-            # Excel Header: Baris 12 (Index 11)
-            # Excel Data: Sampai Baris 25 (Index 25) -> Kita lebihkan biar Kupang ketangkap
-            # Kolom: A sampai L (12 Kolom)
+            # --- UPDATE: TARIK SAMPAI BARIS 22 (Index 22) ---
+            # Start: 11 (Header Excel 12)
+            # End: 22 (Data Excel 22 - KUPANG MASUK)
+            # Cols: 13 (A s/d M)
             
-            df_kaset = get_smart_data(11, 26, 12) 
+            df_kaset = get_strict_data_safe(11, 22, 13) 
             
             if not df_kaset.empty:
-                # FORMAT PERSEN PINTAR
                 for col in df_kaset.columns:
-                    if "CABANG" in col.upper() or "KOTA" in col.upper(): continue
+                    if "CABANG" in col.upper() or "INFO" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
                         s_numeric = pd.to_numeric(clean_val, errors='coerce')
@@ -910,12 +899,12 @@ elif st.session_state['app_mode'] == 'main':
                 
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Stock Kaset tidak ditemukan. Cek range di script.")
+                st.info("Data Stock Kaset Kosong.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(24, 30, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_smart_data(31, 38, 7), use_container_width=True, hide_index=True)
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(24, 29, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data_safe(31, 38, 7), use_container_width=True, hide_index=True)
 
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1249,6 +1238,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
