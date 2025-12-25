@@ -827,37 +827,30 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-# =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL PRESISI)
+    # =========================================================================
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL STRICT - A12:M21)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         
-        def get_precise_data(r_header_idx, r_end_idx, c_end_idx):
+        # Fungsi Helper Super Ketat (Sesuai Koordinat)
+        def get_strict_data(r_start_idx, r_end_idx, c_end_idx):
             try:
-                if not df_sp_raw.empty and df_sp_raw.shape[0] > r_header_idx:
-                    # Ambil potongan data
-                    subset = df_sp_raw.iloc[r_header_idx:r_end_idx, 0:c_end_idx]
+                # Pastikan data sheet ada
+                if not df_sp_raw.empty:
+                    # POTONG SESUAI KOORDINAT
+                    # r_start_idx = 11 (Excel Baris 12)
+                    # r_end_idx   = 21 (Excel Baris 21) -> Python iloc berhenti SEBELUM angka ini, jadi index 20 (Baris 21) masuk.
+                    # c_end_idx   = 13 (Kolom A s/d M)
                     
-                    # 1. HEADER MURNI (Sesuai List Abang)
-                    # Kita ambil baris pertama sebagai header APA ADANYA
+                    subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
+                    
+                    # Baris pertama (Excel 12) adalah Header
                     headers = subset.iloc[0].astype(str).str.strip().tolist()
                     subset.columns = headers
                     
-                    # 2. BUANG BARIS HEADER DARI DATA
-                    data_only = subset[1:].copy()
-                    
-                    # 3. FILTER SAMPAH (BARIS KOSONG & JUDUL BAWAH)
-                    # Kita cek kolom pertama (CABANG)
-                    col_1 = data_only.columns[0]
-                    
-                    # Buang jika: Kosong, NaN, None, atau berisi kata "REKAP"
-                    data_only = data_only[
-                        (data_only[col_1].str.strip() != '') & 
-                        (data_only[col_1].str.lower() != 'nan') &
-                        (data_only[col_1].str.lower() != 'none') &
-                        (~data_only[col_1].astype(str).str.contains("REKAP", case=False, na=False))
-                    ]
+                    # Data adalah sisa barisnya (Excel 13 s/d 21)
+                    data_only = subset[1:]
                     
                     return clean_zeros(data_only)
             except: pass
@@ -867,19 +860,21 @@ elif st.session_state['app_mode'] == 'main':
         
         with tab1: 
             st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            st.dataframe(get_precise_data(0, 10, 22), use_container_width=True, hide_index=True)
+            # Sparepart (Asumsi A1:V10)
+            st.dataframe(get_strict_data(0, 10, 22), use_container_width=True, hide_index=True)
             
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- LOGIKA FINAL ---
-            # Header: Baris 12 (Index 11)
-            # Data: Kita tarik sampai Baris 24 (Index 24) -> Cukup untuk Kupang, tapi sebelum tabel bawah
-            # Kolom: 12 Kolom (A-L)
+            # --- EKSEKUSI KOORDINAT A12:M21 ---
+            # Start: 11 (Header Excel 12)
+            # End: 21 (Data Excel 21)
+            # Cols: 13 (A s/d M)
             
-            df_kaset = get_precise_data(11, 24, 12) 
+            df_kaset = get_strict_data(11, 21, 13) 
             
             if not df_kaset.empty:
+                # FORMAT PERSEN
                 for col in df_kaset.columns:
                     if "CABANG" in col.upper(): continue
                     try:
@@ -893,14 +888,13 @@ elif st.session_state['app_mode'] == 'main':
                 
                 st.dataframe(df_kaset, use_container_width=True, hide_index=True)
             else:
-                st.info("Data Stock Kaset tidak ditemukan.")
+                st.info("Data Stock Kaset Kosong.")
 
         with tab3:
             c1, c2 = st.columns(2)
-            # Monitoring Kaset Rusak (Tabel Bawah)
-            # Karena tabel atas tadi sampai baris 24 (REKAP di baris 25/26), kita mulai ini dari 24
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_precise_data(24, 29, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_precise_data(31, 38, 7), use_container_width=True, hide_index=True)
+            # Koordinat Tabel Bawah disesuaikan agar tidak bentrok
+            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_strict_data(24, 29, 6), use_container_width=True, hide_index=True)
+            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_strict_data(31, 38, 7), use_container_width=True, hide_index=True)
   
    
     # =========================================================================
@@ -1235,6 +1229,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
