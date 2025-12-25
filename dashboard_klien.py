@@ -828,7 +828,7 @@ elif st.session_state['app_mode'] == 'main':
         except:
             return df_in
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL ANTI-CRASH A12:M21)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL FIX - KUPANG INCLUDED)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
@@ -837,15 +837,13 @@ elif st.session_state['app_mode'] == 'main':
         def get_strict_data_safe(r_start_idx, r_end_idx, c_end_idx):
             try:
                 if not df_sp_raw.empty:
-                    # POTONG SESUAI KOORDINAT (A12:M21)
-                    # Baris: 11 s/d 21 (Python Index)
-                    # Kolom: 0 s/d 13 (A s/d M)
+                    # POTONG SESUAI KOORDINAT
                     subset = df_sp_raw.iloc[r_start_idx:r_end_idx, 0:c_end_idx]
                     
                     # 1. AMBIL HEADER MENTAH
                     raw_headers = subset.iloc[0].astype(str).str.strip().tolist()
                     
-                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (INI YANG BIKIN ERROR HILANG)
+                    # 2. PROSES PEMBERSIHAN NAMA KEMBAR (ANTI CRASH)
                     final_headers = []
                     seen_counts = {}
                     
@@ -856,12 +854,12 @@ elif st.session_state['app_mode'] == 'main':
                             
                         if col in seen_counts:
                             seen_counts[col] += 1
-                            final_headers.append(f"{col}_{seen_counts[col]}") # Tambah _1, _2 dst
+                            final_headers.append(f"{col}_{seen_counts[col]}") 
                         else:
                             seen_counts[col] = 0
                             final_headers.append(col)
                     
-                    # 3. PASANG HEADER BARU YANG SUDAH AMAN
+                    # 3. PASANG HEADER BARU
                     subset.columns = final_headers
                     
                     # 4. AMBIL DATA
@@ -879,16 +877,15 @@ elif st.session_state['app_mode'] == 'main':
         with tab2: 
             st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             
-            # --- EKSEKUSI A12:M21 DENGAN PENGAMAN ---
+            # --- UPDATE: TARIK SAMPAI BARIS 22 (Index 22) ---
             # Start: 11 (Header Excel 12)
-            # End: 21 (Data Excel 21)
+            # End: 22 (Data Excel 22 - KUPANG MASUK)
             # Cols: 13 (A s/d M)
             
-            df_kaset = get_strict_data_safe(11, 21, 13) 
+            df_kaset = get_strict_data_safe(11, 22, 13) 
             
             if not df_kaset.empty:
                 for col in df_kaset.columns:
-                    # Lewati kolom Cabang atau Info tambahan
                     if "CABANG" in col.upper() or "INFO" in col.upper(): continue
                     try:
                         clean_val = df_kaset[col].astype(str).str.replace('%', '').str.strip()
@@ -1241,6 +1238,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
