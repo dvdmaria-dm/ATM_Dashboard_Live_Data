@@ -829,46 +829,62 @@ elif st.session_state['app_mode'] == 'main':
             return df_in
 
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (CEK DUA LOKASI)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
-        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; padding: 4px 6px !important; white-space: normal !important; vertical-align: top !important; line-height: 1.2 !important; height: auto !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; padding: 3px 6px !important; white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
-        def get_sp_slice(r_start, r_end, c_end):
-            if not df_sp_raw.empty and df_sp_raw.shape[0] >= r_end and df_sp_raw.shape[1] >= c_end:
-                subset = df_sp_raw.iloc[r_start:r_end, 0:c_end]
-                headers = subset.iloc[0].astype(str).tolist()
-                seen_counts = {}; final_cols = []
-                for col in headers:
-                    col = col.strip(); col = "Info" if col == "" else col
-                    if col in seen_counts: seen_counts[col] += 1; col = f"{col}_{seen_counts[col]}"
-                    else: seen_counts[col] = 0
-                    final_cols.append(col)
-                subset.columns = final_cols; return clean_zeros(subset[1:])
-            return pd.DataFrame()
-        tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
-        with tab1: st.markdown(f'<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(0, 10, 22), use_container_width=True, hide_index=True)
-        with tab2: 
-            st.markdown(f'<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
-            # LOGIKA FORMAT PERSEN KHUSUS STOCK KASET
-            df_kaset = get_sp_slice(11, 22, 12)
-            if not df_kaset.empty:
-                for col in df_kaset.columns:
-                    # Lewati kolom CABANG/NAMA KOTA (biasanya kolom pertama)
-                    if "CABANG" in col.upper() or "KOTA" in col.upper() or col == df_kaset.columns[0]:
-                        continue
-                    # Konversi angka string ke float lalu format persen
-                    # Misal: "0.99" -> 0.99 -> "99%"
-                    # Misal: "1" -> 1.0 -> "100%"
-                    try:
-                        s_numeric = pd.to_numeric(df_kaset[col], errors='coerce')
-                        df_kaset[col] = s_numeric.apply(lambda x: f"{x:.0%}" if pd.notnull(x) else "")
-                    except: pass
-            st.dataframe(df_kaset, use_container_width=True, hide_index=True)
-            
-        with tab3:
-            c1, c2 = st.columns(2)
-            with c1: st.markdown(f'<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(24, 28, 6), use_container_width=True, hide_index=True)
-            with c2: st.markdown(f'<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True); st.dataframe(get_sp_slice(31, 36, 7), use_container_width=True, hide_index=True)
+        st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #e0f2f1 !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
+        
+        st.info("🔍 DIAGNOSA DATA: Membandingkan Lokasi Lama (A) vs Baru (X)")
+
+        tab1, tab2 = st.tabs(["LOKASI A (A12:L22)", "LOKASI X (X1:AI10)"])
+        
+        # --- TAB 1: CEK LOKASI LAMA (A12) ---
+        with tab1:
+            st.write("Melihat Koordinat **A12 s/d L22**:")
+            if not df_sp_raw.empty:
+                # Ambil mentah, jangan diolah dulu biar kelihatan aslinya
+                # Index 11 = Baris 12
+                # Index 22 = Baris 23
+                # Kolom 0-12 = A-L
+                slice_a = df_sp_raw.iloc[11:22, 0:12]
+                st.dataframe(slice_a, use_container_width=True)
+            else:
+                st.write("Data Kosong")
+
+        # --- TAB 2: CEK LOKASI BARU (X1) ---
+        with tab2:
+            st.write("Melihat Koordinat **X1 s/d AI10**:")
+            if not df_sp_raw.empty and df_sp_raw.shape[1] >= 35:
+                # Index 0 = Baris 1
+                # Index 10 = Baris 11
+                # Kolom 23 = X
+                # Kolom 35 = AI
+                slice_x = df_sp_raw.iloc[0:10, 23:35]
+                
+                # --- PROSES MEMBERSIHKAN HEADER (X1) ---
+                # Kita anggap Baris Pertama (Index 0) adalah Header Sebenarnya
+                try:
+                    raw_headers = slice_x.iloc[0].astype(str).str.strip().tolist()
+                    
+                    # Buat nama unik (Anti Crash)
+                    final_headers = []
+                    seen = {}
+                    for h in raw_headers:
+                        if h in seen: seen[h]+=1; final_headers.append(f"{h}_{seen[h]}")
+                        else: seen[h]=0; final_headers.append(h)
+                    
+                    # Pasang Header & Tampilkan Data
+                    # Kita ambil data mulai baris ke-2 (Index 1) karena Index 0 itu header
+                    df_show = pd.DataFrame(slice_x.values[1:], columns=final_headers)
+                    
+                    st.success("✅ Jika tabel di bawah ini RAPI, berarti data BENAR ada di X1.")
+                    st.dataframe(df_show, use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.error(f"Gagal memproses header: {e}")
+                    st.dataframe(slice_x) # Tampilkan mentah kalau gagal
+            else:
+                st.error("❌ KOSONG / ERROR. Kolom X (Index 23) tidak ditemukan.")
+                st.caption("Penyebab: Data di memori masih data lama (sebelum digeser). Wajib Clear Cache.")
     
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
@@ -1202,6 +1218,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
