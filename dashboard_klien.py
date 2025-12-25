@@ -827,71 +827,68 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-
     # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FINAL CLEAN - NO EMPTY ROWS)
+    # 1. LAYOUT KHUSUS: SPAREPART & KASET (STABLE VERSION - ANTI DUPLICATE)
     # =========================================================================
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
-        # 1. AMBIL DATA A12:L22 (Index 11 sampai 22)
+        # --- FUNGSI SAKTI: BUAT HEADER UNIK (AGAR TIDAK DUPLICATE ERROR) ---
+        def make_unique_df(subset_data):
+            try:
+                raw_h = [str(x).strip() if str(x).strip() != "" else "Info" for x in subset_data.iloc[0]]
+                final_h = []
+                counts = {}
+                for h in raw_h:
+                    if h in counts:
+                        counts[h] += 1
+                        final_h.append(f"{h}_{counts[h]}")
+                    else:
+                        counts[h] = 0
+                        final_h.append(h)
+                return pd.DataFrame(subset_data.values[1:], columns=final_h)
+            except: return pd.DataFrame()
+
+        # 1. PROSES TABEL KASET (A12:L22)
         subset_kaset = df_sp_raw.iloc[11:22, 0:12]
-        
-        # 2. HEADER MANUAL (Tetap Pakai Ini Biar Rapi)
-        manual_headers = [
-            "CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT",
-            "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT",
-            "W2 DEC GOOD CURRENT", "W2 DEC GOOD REJECT",
-            "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT",
-            "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"
-        ]
-        
-        # 3. BUAT DATAFRAME MULAI DARI BARIS KE-13 (Index 1 dari subset)
+        manual_headers = ["CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT", "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT", "W2 DEC GOOD CURRENT", "W2 DEC GOOD REJECT", "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT", "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"]
         df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
         
-        # --- ⚡ SENTUHAN MAUT: BUANG BARIS KOSONG / HEADER NYANGKUT ---
-        # Kita hapus baris jika kolom CABANG kosong atau berisi teks "CABANG"
-        df_kaset_final = df_kaset_final[
-            (df_kaset_final['CABANG'].str.strip() != "") & 
-            (df_kaset_final['CABANG'].notna()) &
-            (df_kaset_final['CABANG'].str.upper() != "CABANG")
-        ]
-        
+        # Buat baris kosong/header nyangkut
+        df_kaset_final = df_kaset_final[(df_kaset_final['CABANG'].str.strip() != "") & (df_kaset_final['CABANG'].notna()) & (df_kaset_final['CABANG'].str.upper() != "CABANG")]
+
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
         with tab1:
             st.markdown('<div class="section-header">🛠️ Ketersediaan SparePart</div>', unsafe_allow_html=True)
-            sub_sp = df_sp_raw.iloc[0:10, 0:22]
-            st.dataframe(pd.DataFrame(sub_sp.values[1:], columns=sub_sp.iloc[0].tolist()), use_container_width=True, hide_index=True)
+            # Pakai fungsi unik agar tidak error
+            df_sp_clean = make_unique_df(df_sp_raw.iloc[0:10, 0:22])
+            st.dataframe(df_sp_clean, use_container_width=True, hide_index=True)
 
         with tab2:
-            st.markdown('<div class="section-header">📼 Ketersediaan Kaset (Sempurna)</div>', unsafe_allow_html=True)
-            
-            # FORMATTING PERSEN & ANGKA
+            st.markdown('<div class="section-header">📼 Ketersediaan Kaset</div>', unsafe_allow_html=True)
             for col in df_kaset_final.columns:
                 if "CABANG" not in col:
                     try:
-                        s = df_kaset_final[col].astype(str).str.replace('%', '').str.strip()
-                        n = pd.to_numeric(s, errors='coerce')
-                        df_kaset_final[col] = n.apply(
-                            lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else "")
-                        )
+                        n = pd.to_numeric(df_kaset_final[col].astype(str).str.replace('%',''), errors='coerce')
+                        df_kaset_final[col] = n.apply(lambda x: f"{x:.0%}" if (pd.notnull(x) and x <= 1.5) else (f"{x:.0f}" if pd.notnull(x) else ""))
                     except: pass
-            
-            # Tampilkan tabel yang sudah benar-benar bersih
             st.dataframe(df_kaset_final, use_container_width=True, hide_index=True)
 
         with tab3:
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                sub_rsk = df_sp_raw.iloc[24:30, 0:6]
-                st.dataframe(pd.DataFrame(sub_rsk.values[1:], columns=sub_rsk.iloc[0].tolist()), use_container_width=True, hide_index=True)
+                # SEBELUMNYA ERROR DI SINI: Sekarang kita buat unik
+                df_rsk = make_unique_df(df_sp_raw.iloc[24:30, 0:6])
+                st.dataframe(df_rsk, use_container_width=True, hide_index=True)
             with c2:
                 st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                sub_pm = df_sp_raw.iloc[31:39, 0:7]
-                st.dataframe(pd.DataFrame(sub_pm.values[1:], columns=sub_pm.iloc[0].tolist()), use_container_width=True, hide_index=True)
+                # SEBELUMNYA POTENSI ERROR DI SINI: Sekarang kita buat unik
+                df_pm = make_unique_df(df_sp_raw.iloc[31:39, 0:7])
+                st.dataframe(df_pm, use_container_width=True, hide_index=True)
 
+    
     # =========================================================================
     # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
     # =========================================================================
@@ -1224,6 +1221,7 @@ elif st.session_state['app_mode'] == 'main':
                 # TABEL SCROLLABLE (HEIGHT 200px)
 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
