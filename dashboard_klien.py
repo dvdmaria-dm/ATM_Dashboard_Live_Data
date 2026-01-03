@@ -66,7 +66,7 @@ except Exception as e:
 
 
 # =========================================================================
-# 3. FUNGSI LOAD DATA (DENGAN INDIKATOR STATUS)
+# 3. FUNGSI LOAD DATA (DENGAN LOGIKA FORMATTING KETAT)
 # =========================================================================
 @st.cache_data(ttl=600, show_spinner=False)
 def load_data():
@@ -96,7 +96,9 @@ def load_data():
 
         if 'WAKTU INSERT' in df_in.columns: df_in['WAKTU_INSERT'] = pd.to_datetime(df_in['WAKTU INSERT'], errors='coerce')
         
+        # --- PERBAIKAN KOLOM COMPLAIN (PASTIKAN ANGKA) ---
         if 'JUMLAH_COMPLAIN' in df_in.columns:
+            # Paksa jadi numeric, yang error jadi NaN lalu diisi 0
             df_in['JUMLAH_COMPLAIN'] = pd.to_numeric(df_in['JUMLAH_COMPLAIN'].astype(str).str.replace('-', '0'), errors='coerce').fillna(0).astype(int)
         
         if 'WEEK' not in df_in.columns and 'BULAN_WEEK' in df_in.columns: df_in['WEEK'] = df_in['BULAN_WEEK']
@@ -204,7 +206,8 @@ def load_data():
 # --- HELPER FUNCTIONS (GLOBAL) ---
 def calculate_risk_tiers(df_target):
     if df_target.empty: return 0, 0, 0
-    if 'JUMLAH_COMPLAIN' in df_target.columns and df_target['JUMLAH_COMPLAIN'].sum() > len(df_target):
+    # FIX: Pastikan menghitung SUM complain per TID
+    if 'JUMLAH_COMPLAIN' in df_target.columns:
          counts = df_target.groupby('TID')['JUMLAH_COMPLAIN'].sum()
     else:
          counts = df_target['TID'].value_counts() if 'TID' in df_target.columns else []
@@ -309,11 +312,17 @@ elif st.session_state['app_mode'] == 'main':
             if pd.isna(s) or s == "": return "N/A"
             return html.escape(str(s)).replace("'", "").replace('"', "")
         
+        # --- FIX: LOGIKA HITUNG HEADER AGAR KONSISTEN ---
         def get_val_safe(dframe, cat_name):
             if dframe.empty: return 0
             try:
-                if cat_name == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns:
-                    return int(dframe['JUMLAH_COMPLAIN'].fillna(0).sum())
+                # JIKA KATEGORI ADALAH COMPLAIN, WAJIB SUM KOLOM J
+                if cat_name == 'Complain':
+                    if 'JUMLAH_COMPLAIN' in dframe.columns:
+                        return int(dframe['JUMLAH_COMPLAIN'].fillna(0).sum())
+                    else: return 0
+                
+                # JIKA KATEGORI LAIN, HITUNG JUMLAH BARIS
                 return len(dframe)
             except:
                 return 0
@@ -509,10 +518,9 @@ elif st.session_state['app_mode'] == 'main':
         st.markdown(css_style + f'<div class="whisper-container">{fade_html}</div>', unsafe_allow_html=True)
 
     with head_c3:
-        # LOGIKA INDIKATOR STATUS DI HEADER (REVISI BORU)
+        # LOGIKA INDIKATOR STATUS DI HEADER
         curr_date = datetime.now().strftime("%d %B %Y")
         
-        # Tentukan Warna & Teks Status
         if "ONLINE" in connection_status:
             status_bg = "#16A34A" # Hijau
             status_text = "ONLINE"
@@ -702,8 +710,12 @@ elif st.session_state['app_mode'] == 'main':
             df_curr = df_curr[df_curr['TEMP_W_NUM'] <= limit_num].copy()
             df_curr.drop(columns=['TEMP_W_NUM'], inplace=True)
 
-    if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in df_curr.columns:
-        total_ticket = int(df_curr['JUMLAH_COMPLAIN'].sum())
+    # --- HITUNG TOTAL (Revisi: Jika Complain, Sum Kolom J) ---
+    if sel_cat == 'Complain':
+        # Pastikan kolom ada dan numerik (safety)
+        if 'JUMLAH_COMPLAIN' in df_curr.columns:
+            total_ticket = int(df_curr['JUMLAH_COMPLAIN'].fillna(0).sum())
+        else: total_ticket = 0
     else:
         total_ticket = len(df_curr)
 
@@ -722,6 +734,7 @@ elif st.session_state['app_mode'] == 'main':
             df_met = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
             df_prev_met = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy() if prev_mon else pd.DataFrame()
 
+        # FIX METRICS: GUNAKAN SUM UNTUK COMPLAIN
         if sel_cat == 'Complain':
             total_t = int(df_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_met.columns else 0
             prev_t = int(df_prev_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_prev_met.columns else 0
@@ -975,10 +988,18 @@ elif st.session_state['app_mode'] == 'main':
             # 1. OVERVIEW SUMMARY
             st.markdown(f'<div class="section-header">📊 {sel_cat} Overview Summary</div>', unsafe_allow_html=True)
             
+            # --- FIX: LOGIKA HITUNG SUMMARY STANDARD (COMPLAIN WAJIB SUM) ---
             def get_val_std(dframe):
                 if dframe.empty: return 0
-                if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns:
-                    return int(dframe['JUMLAH_COMPLAIN'].fillna(0).sum())
+                
+                # KHUSUS COMPLAIN: SUM KOLOM JUMLAH_COMPLAIN
+                if sel_cat == 'Complain':
+                    if 'JUMLAH_COMPLAIN' in dframe.columns:
+                        # Safety: Konversi ke numeric dulu sebelum sum
+                        return int(pd.to_numeric(dframe['JUMLAH_COMPLAIN'], errors='coerce').fillna(0).sum())
+                    return 0
+
+                # KATEGORI LAIN: COUNT BARIS
                 return len(dframe)
 
             val_total_atm = 611 
@@ -1003,8 +1024,12 @@ elif st.session_state['app_mode'] == 'main':
             st.markdown(f'<div class="section-header" style="margin-top: 15px;">⚠️ Risk Tiers Analysis</div>', unsafe_allow_html=True)
             def safe_risk_calc(dframe):
                 if dframe.empty: return [0, 0, 0]
-                if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns: tid_counts = dframe.groupby('TID')['JUMLAH_COMPLAIN'].sum()
-                else: tid_counts = dframe['TID'].value_counts()
+                # FIX: Pastikan Complain hitung SUM per TID
+                if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns: 
+                    tid_counts = dframe.groupby('TID')['JUMLAH_COMPLAIN'].sum()
+                else: 
+                    tid_counts = dframe['TID'].value_counts()
+                    
                 return [tid_counts[tid_counts == 1].count(), tid_counts[(tid_counts >= 2) & (tid_counts <= 3)].count(), tid_counts[tid_counts > 3].count()]
 
             p_t = safe_risk_calc(df_prev); c_t = safe_risk_calc(df_curr)
@@ -1047,7 +1072,6 @@ elif st.session_state['app_mode'] == 'main':
                 if not df_curr.empty and 'LOKASI' in df_curr.columns:
                     loc_counts = df_curr['LOKASI'].value_counts().reset_index(); loc_counts.columns = ['LOKASI', 'FREQ']; top_locs = loc_counts.head(50) 
                     st.dataframe(top_locs, height=200, column_config={ "LOKASI": st.column_config.TextColumn("Lokasi", width="medium"), "FREQ": st.column_config.ProgressColumn("Frekuensi", format="%d", min_value=0, max_value=int(top_locs['FREQ'].max()) if not top_locs.empty else 10, width="small") }, use_container_width=True, hide_index=True)
-                else: st.info("Data Lokasi tidak cukup.")
             
             # --- ANALISA & CATATAN ---
             st.markdown(f'<div class="section-header" style="margin-top: 15px; margin-bottom: 5px !important;">📝 Analisa & Catatan</div>', unsafe_allow_html=True)
