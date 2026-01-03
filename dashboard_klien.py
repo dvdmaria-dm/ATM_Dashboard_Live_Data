@@ -474,7 +474,7 @@ elif st.session_state['app_mode'] == 'main':
     with head_c1:
         st.markdown("""
         <div style="line-height: 1.1;">
-            <div class="main-title" style="font-size: 30px !important;">ATM WEEKLY PERFORMANCE MONITORING</div>
+            <div class="main-title" style="font-size: 30px !important;">ATM WEEKLY PERFORMANCE</div>
             <div class="sub-title" style="font-size: 5px !important; margin-top: -2px;">PT KELOLA JASA ARTA</div>
         </div>
         """, unsafe_allow_html=True)
@@ -1193,5 +1193,6 @@ elif st.session_state['app_mode'] == 'main':
                 cols_to_show = ['CABANG'] + [c for c in final_cols_cab if c in top_cab_str.columns]
                 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
