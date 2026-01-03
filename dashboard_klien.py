@@ -10,12 +10,11 @@ import html
 # 1. KONFIGURASI HALAMAN & TURBO CACHE SETUP
 # =========================================================================
 
-# PENTING: File 'image_11.png' HARUS ADA di folder yang sama!
 try:
     st.set_page_config(
         layout='wide',
         page_title="ATM Performance Dashboard",
-        page_icon="image_11.png", 
+        page_icon="📊", 
         initial_sidebar_state="collapsed"
     )
 except:
@@ -27,84 +26,85 @@ st.markdown("""
         .block-container {padding-top: 1rem; padding-bottom: 0rem; padding-left: 1rem; padding-right: 1rem;}
         header {visibility: hidden;} 
         footer {visibility: hidden;} 
-        .stApp {background-color: #F8FAFC;} /* Background Default Terang */
+        .stApp {background-color: #F8FAFC;} 
     </style>
 """, unsafe_allow_html=True)
 
 
-# --- 2. KONEKSI DATA GOOGLE SHEETS (SMART CLOUD & LOCAL) ---
+# =========================================================================
+# 2. KONEKSI DATA GOOGLE SHEETS (SMART CLOUD & LOCAL - VERSI ANTI NYASAR)
+# =========================================================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340/edit"
 SHEET_MAIN = 'AIMS_Master' 
 SHEET_SLM = 'SLM Visit Log'
 SHEET_MRI = 'Data_Form' 
 SHEET_MONITORING = 'Summary Monitoring Cash'
 SHEET_SP = 'Sparepart&kaset' 
-JSON_FILE = "credentials.json" 
 
-# Logika Koneksi Pintar: Cek Secrets dulu (Cloud), baru File JSON (Lokal)
+# --- JURUS KUNCI LOKASI FILE (SUPAYA TIDAK NYASAR DI LOCALHOST) ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+JSON_FILE = os.path.join(current_dir, "credentials.json")
+
 gc = None
+
 try:
-    if 'gcp_service_account' in st.secrets:
-        # Koneksi via Streamlit Cloud Secrets
+    # --- PRIORITAS 1: CEK FILE LOKAL (DENGAN PATH LENGKAP) ---
+    if os.path.exists(JSON_FILE):
+        gc = gspread.service_account(filename=JSON_FILE)
+    
+    # --- PRIORITAS 2: CEK CLOUD SECRETS ---
+    elif 'gcp_service_account' in st.secrets:
         creds_dict = dict(st.secrets["gcp_service_account"])
         gc = gspread.service_account_from_dict(creds_dict)
-    elif os.path.exists(JSON_FILE):
-        # Koneksi via File Lokal
-        gc = gspread.service_account(filename=JSON_FILE)
+    
+    else:
+        # Jika file benar-benar tidak ada di folder script
+        st.error(f"⚠️ FATAL: File 'credentials.json' TIDAK ADA di folder: {current_dir}")
+
 except Exception as e:
-    # Jika gagal koneksi (misal internet mati), biarkan gc None agar masuk mode Offline di load_data
-    pass
+    st.error(f"⚠️ KONEKSI ERROR: {e}")
 
 
-# --- 3. FUNGSI LOAD DATA (HYBRID: ONLINE + OFFLINE BACKUP) ---
-@st.cache_data(ttl=14400, show_spinner=False)
+# =========================================================================
+# 3. FUNGSI LOAD DATA (DENGAN INDIKATOR STATUS)
+# =========================================================================
+@st.cache_data(ttl=600, show_spinner=False)
 def load_data():
     # File Backup Lokal
     backup_file = 'DATA_MASTER_ATM.xlsx'
     
-    # --- FUNGSI FORMATTING REVISI (LEBIH PINTAR & HORMAT DATA) ---
+    # --- FUNGSI FORMATTING ---
     def clean_and_format(df_in):
         if df_in.empty: return df_in
-        # Bersihkan Header
         df_in.columns = df_in.columns.str.strip().str.upper()
         
-        # 1. Format Tanggal (Coba baca, tapi jangan panik kalau gagal)
         if 'TANGGAL' in df_in.columns: 
-            # Coba konversi tanggal, kalau gagal jadi NaT
             df_in['TANGGAL_OBJ'] = pd.to_datetime(df_in['TANGGAL'], errors='coerce')
-            
-            # Coba ambil nama bulan dari tanggal yang berhasil dibaca
             df_in['CALC_MONTH'] = df_in['TANGGAL_OBJ'].dt.strftime('%B')
         else:
             df_in['CALC_MONTH'] = None
 
-        # 2. LOGIKA PENENTUAN BULAN (FIXED)
-        # Prioritas 1: Ambil dari hasil hitungan tanggal (CALC_MONTH)
-        # Prioritas 2: Jika hasil hitungan 'nan', AMBIL DARI KOLOM 'BULAN' EXCEL (Fallback)
         if 'BULAN' in df_in.columns:
-            # Pastikan kolom BULAN Excel bersih
             df_in['BULAN'] = df_in['BULAN'].astype(str).str.strip().str.capitalize()
-            # Isi BULAN_EN. Jika CALC_MONTH kosong/nan, pakai isi kolom BULAN
             df_in['BULAN_EN'] = df_in['CALC_MONTH'].fillna(df_in['BULAN'])
         else:
-            # Kalau tidak ada kolom BULAN di Excel, terpaksa pakai hasil hitungan
             df_in['BULAN_EN'] = df_in['CALC_MONTH']
             
-        # Kembalikan kolom TANGGAL asli ke objek datetime (untuk sorting week dll)
         if 'TANGGAL_OBJ' in df_in.columns:
             df_in['TANGGAL'] = df_in['TANGGAL_OBJ']
             df_in.drop(columns=['TANGGAL_OBJ', 'CALC_MONTH'], inplace=True)
 
         if 'WAKTU INSERT' in df_in.columns: df_in['WAKTU_INSERT'] = pd.to_datetime(df_in['WAKTU INSERT'], errors='coerce')
         
-        # Format Angka Complain
         if 'JUMLAH_COMPLAIN' in df_in.columns:
             df_in['JUMLAH_COMPLAIN'] = pd.to_numeric(df_in['JUMLAH_COMPLAIN'].astype(str).str.replace('-', '0'), errors='coerce').fillna(0).astype(int)
         
-        # Fallback Week
         if 'WEEK' not in df_in.columns and 'BULAN_WEEK' in df_in.columns: df_in['WEEK'] = df_in['BULAN_WEEK']
         
         return df_in
+
+    # Variabel Status Koneksi
+    source_status = "UNKNOWN"
 
     try:
         # --- PERCOBAAN A: ONLINE (GOOGLE SHEETS) ---
@@ -161,7 +161,8 @@ def load_data():
             if len(vals_sp) > 0: df_sp_raw = pd.DataFrame(vals_sp)
         except: pass
 
-        return df, df_slm, df_mri_ops, df_mon, df_sp_raw
+        source_status = "ONLINE 🟢"
+        return df, df_slm, df_mri_ops, df_mon, df_sp_raw, source_status
 
     except Exception as e:
         # --- PERCOBAAN B: OFFLINE (LOCAL EXCEL BACKUP) ---
@@ -193,16 +194,16 @@ def load_data():
                 try: df_sp_raw = pd.read_excel(backup_file, sheet_name=SHEET_SP, header=None, dtype=str)
                 except: df_sp_raw = pd.DataFrame()
 
-                return df, df_slm, df_mri_ops, df_mon, df_sp_raw
+                source_status = "OFFLINE 🟠"
+                return df, df_slm, df_mri_ops, df_mon, df_sp_raw, source_status
             except:
                 pass
 
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "ERROR 🔴"
 
 # --- HELPER FUNCTIONS (GLOBAL) ---
 def calculate_risk_tiers(df_target):
     if df_target.empty: return 0, 0, 0
-    # Jika Complain, hitung berdasarkan SUM. Jika lain, hitung Frequency.
     if 'JUMLAH_COMPLAIN' in df_target.columns and df_target['JUMLAH_COMPLAIN'].sum() > len(df_target):
          counts = df_target.groupby('TID')['JUMLAH_COMPLAIN'].sum()
     else:
@@ -219,7 +220,7 @@ def clean_zeros(df_in):
     return df_in.astype(str).replace(['0', '0.0', '0.00', 'nan', 'None'], '')
 
 # --- EKSEKUSI LOAD DATA ---
-df, df_slm, df_mri_ops, df_mon, df_sp_raw = load_data()
+df, df_slm, df_mri_ops, df_mon, df_sp_raw, connection_status = load_data()
 
 # Validasi Data Utama
 if df.empty:
@@ -227,18 +228,14 @@ if df.empty:
 
 
 # =========================================================================
-# 4. LOGIKA HALAMAN (INISIALISASI DULU BARU DICEK)
+# 4. LOGIKA HALAMAN
 # =========================================================================
 
-# --- LANGKAH 1: INISIALISASI (WAJIB PALING ATAS SEBELUM IF) ---
 if 'app_mode' not in st.session_state:
     st.session_state['app_mode'] = 'cover'
 
-# --- LANGKAH 2: CEK KONDISI HALAMAN ---
-
 # --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE) ---
 if st.session_state['app_mode'] == 'cover':
-    # 1. CSS Styling (Murni CSS, Tanpa f-string)
     st.markdown("""
         <style>
             .cover-container {
@@ -277,7 +274,6 @@ if st.session_state['app_mode'] == 'cover':
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. Konten HTML (Gunakan penggabungan string biasa agar aman dari f-string error)
     hari_ini = datetime.now().strftime("%d %B %Y")
     
     html_markup = '<div class="cover-container">'
@@ -294,40 +290,29 @@ if st.session_state['app_mode'] == 'cover':
     
     st.markdown(html_markup, unsafe_allow_html=True)
 
-    # 3. Tombol Launch
     col1, col2, col3 = st.columns([5, 2, 5])
     with col2:
         if st.button("🚀 LAUNCH DASHBOARD", use_container_width=True, type="primary"):
             st.session_state['app_mode'] = 'main'
             st.rerun()
 
-
-
-# --- B. TAMPILAN DASHBOARD UTAMA (SCRIPT ASLI ABANG ADA DI SINI) ---
+# --- B. TAMPILAN DASHBOARD UTAMA ---
 elif st.session_state['app_mode'] == 'main':
     
-    # =========================================================================
-    # 5. HEADER SECTION & THEME ENGINE (FIXED: ANIMASI JALAN & DATA COMPLAIN AMAN)
-    # =========================================================================
-    
-    # --- A. LOGIKA DATA HEADER (GENERATOR PESAN) ---
+    # --- A. LOGIKA DATA HEADER ---
     try:
-        # 1. AMBIL STATE
         h_mon = st.session_state.get('w_mon', df['BULAN_EN'].unique().tolist()[-1] if not df.empty and 'BULAN_EN' in df.columns else '')
         h_week = st.session_state.get('w_week', 'All Week')
         h_cat = st.session_state.get('nav_cat', 'MRI Project') 
 
-        # 2. FILTER DATA & FUNGSI PEMBERSIH
         def safe_text(s):
             if pd.isna(s) or s == "": return "N/A"
             return html.escape(str(s)).replace("'", "").replace('"', "")
         
-        # FUNGSI PINTAR: HITUNG COMPLAIN (SUM) vs LAINNYA (COUNT)
         def get_val_safe(dframe, cat_name):
             if dframe.empty: return 0
             try:
                 if cat_name == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns:
-                    # Pastikan fillna(0) agar tidak error kalau ada cell kosong
                     return int(dframe['JUMLAH_COMPLAIN'].fillna(0).sum())
                 return len(dframe)
             except:
@@ -349,7 +334,6 @@ elif st.session_state['app_mode'] == 'main':
         updates = []
         
         if not df_target.empty:
-            # Persiapan Data Waktu
             months_list = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
             try: idx_m = months_list.index(h_mon); h_prev_mon = months_list[idx_m - 1] if idx_m > 0 else months_list[11]
             except: h_prev_mon = ""
@@ -368,9 +352,7 @@ elif st.session_state['app_mode'] == 'main':
             else:
                 df_scope_curr = df_curr_m; df_scope_prev = df_prev_m
 
-            # --- GENERATE PESAN (GUNAKAN get_val_safe) ---
-            
-            # 1. MONTHLY
+            # MONTHLY
             val_m_curr = get_val_safe(df_curr_m, h_cat)
             val_m_prev = get_val_safe(df_prev_m, h_cat)
             diff_m = val_m_curr - val_m_prev
@@ -378,7 +360,7 @@ elif st.session_state['app_mode'] == 'main':
             icon_m = "🔺" if diff_m > 0 else "🔻"; color_m = "#DC2626" if diff_m > 0 else "#16A34A"
             updates.append(f"<span style='color: #64748B;'>[MONTHLY] Total {cat_label}: <b>{val_m_curr}</b> Tiket (<span style='color: {color_m}; font-weight: 800;'>{icon_m} {diff_m} / {pct_m:.1f}%</span> vs {h_prev_mon})</span>")
 
-            # 2. SUMMARY
+            # SUMMARY
             val_s_curr = get_val_safe(df_scope_curr, h_cat)
             val_s_prev = get_val_safe(df_scope_prev, h_cat)
             diff_s = val_s_curr - val_s_prev
@@ -388,7 +370,7 @@ elif st.session_state['app_mode'] == 'main':
             color_s = "#DC2626" if diff_s > 0 else "#16A34A"
             updates.append(f"<span style='color: #64748B;'>[{scope_label}] Kategori {cat_label}: <b>{val_s_curr}</b> Tiket. Selisih: <span style='color: {color_s}; font-weight: 800;'>{diff_str} ({pct_str})</span> vs periode lalu.</span>")
 
-            # 3. RECURRING (Tetap hitung Unit/TID Unik)
+            # RECURRING
             if is_weekly_mode and not df_scope_curr.empty and not df_scope_prev.empty and 'TID' in df_scope_curr.columns:
                 tids_now = set(df_scope_curr['TID']); tids_bef = set(df_scope_prev['TID'])
                 rec_tids = tids_now.intersection(tids_bef)
@@ -398,9 +380,8 @@ elif st.session_state['app_mode'] == 'main':
                     top_rec_str = ", ".join(top_rec_list)
                     updates.append(f"<span style='color: #64748B;'>[RECURRING] Waspada! Ada <span style='color: #F59E0B; font-weight: 800;'>{cnt_rec} Unit</span> Masalah Berulang dari {prev_w_str} ke {h_week}. (Contoh: {top_rec_str}...)</span>")
 
-            # 4 & 5. BRANCH TREND (Aggregasi Sum Complain)
+            # BRANCH TREND
             if 'CABANG' in df_scope_curr.columns:
-                # Fungsi Aggregator
                 def agg_branch(df_in):
                     if h_cat == 'Complain' and 'JUMLAH_COMPLAIN' in df_in.columns:
                         return df_in.groupby('CABANG')['JUMLAH_COMPLAIN'].sum()
@@ -425,7 +406,7 @@ elif st.session_state['app_mode'] == 'main':
                     if best_c['DIFF'] < 0: 
                         updates.append(f"<span style='color: #64748B;'>[BRANCH DROP] Cabang <b>{best_c['CAB']}</b> ({cat_label}) TURUN <span style='color: #16A34A; font-weight: 800;'>{int(best_c['DIFF'])}</span> Tiket ({best_c['PCT']:.0f}%) Total: {best_c['VAL']}.</span>")
 
-            # 6 & 7. TID TREND
+            # TID TREND
             if 'TID' in df_scope_curr.columns:
                 def agg_tid(df_in):
                     if h_cat == 'Complain' and 'JUMLAH_COMPLAIN' in df_in.columns:
@@ -462,11 +443,9 @@ elif st.session_state['app_mode'] == 'main':
         # UPDATE GLOBAL
         updates.append(f"<span style='color: #64748B;'>🌍 GLOBAL ASSETS: <span style='color: #1E293B; font-weight: 800;'>{total_armada}</span> Units Active</span>")
 
-        # --- LOGIKA MATEMATIKA CSS (FIXED) ---
         msg_count = len(updates)
         TIME_SHOW = 8.0; TIME_GAP = 12.0; CYCLE_TIME = TIME_SHOW + TIME_GAP
         TOTAL_DURATION = max(msg_count * CYCLE_TIME, 1)
-        
         PCT_VISIBLE = (TIME_SHOW / TOTAL_DURATION) * 100
         
         fade_html = ""
@@ -480,14 +459,14 @@ elif st.session_state['app_mode'] == 'main':
         fade_html = f'<div class="whisper-item" style="color:orange;">⚠️ System Syncing... (Check Data Format)</div>'
 
 
-    # --- B. RENDER LAYOUT HEADER (CSS) ---
+    # --- B. RENDER LAYOUT HEADER ---
     head_c1, head_c2, head_c3 = st.columns([2.5, 7.0, 2.5])
 
     with head_c1:
         st.markdown("""
         <div style="line-height: 1.1;">
-            <div class="main-title" style="font-size: 30px !important;">MONITORING PERFORMANCE</div>
-            <div class="sub-title" style="font-size: 14px !important; margin-top: -2px; color: #64748B;">PT KELOLA JASA ARTA</div>
+            <div class="main-title" style="font-size: 30px !important;">ATM WEEKLY PERFORMANCE</div>
+            <div class="sub-title" style="font-size: 5px !important; margin-top: -2px;">PT KELOLA JASA ARTA</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -530,20 +509,33 @@ elif st.session_state['app_mode'] == 'main':
         st.markdown(css_style + f'<div class="whisper-container">{fade_html}</div>', unsafe_allow_html=True)
 
     with head_c3:
-        # 1. Tampilkan Tanggal Statis
+        # LOGIKA INDIKATOR STATUS DI HEADER (REVISI BORU)
         curr_date = datetime.now().strftime("%d %B %Y")
         
-        # 2. Wadah Jam (Span dengan ID khusus) & FIX Mentok Kanan
+        # Tentukan Warna & Teks Status
+        if "ONLINE" in connection_status:
+            status_bg = "#16A34A" # Hijau
+            status_text = "ONLINE"
+            status_icon = "☁️"
+        else:
+            status_bg = "#F59E0B" # Orange
+            status_text = "OFFLINE"
+            status_icon = "📂"
+
         st.markdown(f"""
         <div style="display: flex; flex-direction: column; align-items: flex-end; width: 100%; margin-right: -10px;">
-            <div class="date-pill" style="font-size: 10px !important; padding: 2px 8px; margin-bottom: 2px;">📅 {curr_date}</div>
+            <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 2px;">
+                 <div style="background-color: {status_bg}; color: white; font-size: 9px; padding: 2px 8px; border-radius: 4px; font-weight: 800; letter-spacing: 0.5px;">
+                    {status_icon} {status_text}
+                 </div>
+                 <div class="date-pill" style="font-size: 10px !important; padding: 2px 8px;">📅 {curr_date}</div>
+            </div>
             <div style="font-size: 10px; font-weight: 700; color: #16A34A;">
-                ONLINE <span id="clock_ticks">--:--:--</span>
+                LIVE <span id="clock_ticks">--:--:--</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        # 3. Script JavaScript untuk Detik Berjalan (Live Ticker)
         st.components.v1.html(
             """
             <script>
@@ -554,24 +546,20 @@ elif st.session_state['app_mode'] == 'main':
                         minute: '2-digit', 
                         second: '2-digit'
                     });
-                    // Cari elemen dengan ID 'clock_ticks' di parent frame
                     const target = window.parent.document.getElementById('clock_ticks');
                     if (target) {
                         target.innerText = timeString;
                     }
                 }
-                // Jalankan setiap 1000ms (1 detik)
                 setInterval(updateClock, 1000);
-                updateClock(); // Jalankan langsung biar gak nunggu 1 detik
+                updateClock(); 
             </script>
             """,
-            height=0, # Sembunyikan iframe script ini
+            height=0,
             width=0
         )
 
-
-    # C. LOGIKA WARNA & THEME ENGINE
-    # Kunci agar variabel use_exec_mode selalu ada (Anti-Error)
+    # --- THEME ENGINE ---
     if 'theme_mode' not in st.session_state:
         st.session_state.theme_mode = False
 
@@ -614,7 +602,6 @@ elif st.session_state['app_mode'] == 'main':
     <div class="top-header-bar"></div>
     """, unsafe_allow_html=True)
 
-    # --- FIX MERAPATKAN NAVIGASI ---
     st.markdown("""
     <style>
     div[role="radiogroup"] {
@@ -623,7 +610,6 @@ elif st.session_state['app_mode'] == 'main':
     </style>
     """, unsafe_allow_html=True)
 
-    # --- FIX dropdown + toggle ikut naik ---
     st.markdown("""
     <style>
     div[data-testid="column"]:nth-of-type(2) {
@@ -637,13 +623,12 @@ elif st.session_state['app_mode'] == 'main':
     </style>
     """, unsafe_allow_html=True)
 
-    # --- 6. NAVIGASI & FILTER ---
+    # --- NAVIGASI & FILTER ---
     nav_col, filter_col = st.columns([2.5, 1.8], gap="medium")
 
     with nav_col:
         st.markdown("""<style>div[role="radiogroup"] { justify-content: flex-start !important; flex-wrap: nowrap !important; width: 100% !important; } div[role="radiogroup"] label { white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
         menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'SparePart & Kaset']
-        # Tambahkan key="nav_cat" agar Header di atas bisa membacanya
         sel_cat = st.radio("Navigasi:", menu_items, index=0, horizontal=True, label_visibility="collapsed", key="nav_cat")
 
     # --- MEMORY STATE ---
@@ -662,7 +647,6 @@ elif st.session_state['app_mode'] == 'main':
 
     if sel_cat != 'SparePart & Kaset':
         with filter_col:
-            # f1=Periode, f2=Week, f3=Trend, f4=Warna, f5=Mode
             f1, f2, f3, f4, f5 = st.columns([1.4, 1.2, 1.0, 0.6, 0.7], gap="small")
             with f1:
                 try: cur_ix_mon = months_en.index(st.session_state.p_mon)
@@ -681,7 +665,6 @@ elif st.session_state['app_mode'] == 'main':
             with f4:
                 use_color = st.toggle("🎨", key=f"color_btn_{sel_cat}", help="Indikator Warna")
             with f5:
-                # TOMBOL SWITCH MODE ADA DI SINI SEKARANG
                 exec_toggle = st.toggle("🌙", value=st.session_state.theme_mode, key=f"theme_switch_{sel_cat}", help="Executive Mode")
                 if exec_toggle != st.session_state.theme_mode:
                     st.session_state.theme_mode = exec_toggle
@@ -695,7 +678,7 @@ elif st.session_state['app_mode'] == 'main':
     else:
         st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-    # --- LOGIKA DATA PROCESSING (FIXED: COMPLAIN DIHITUNG SUM) ---
+    # --- LOGIKA DATA PROCESSING ---
     df_curr = pd.DataFrame(); df_prev = pd.DataFrame(); total_ticket = 0; avg_ticket = 0
 
     if sel_cat == 'MRI Project':
@@ -719,7 +702,6 @@ elif st.session_state['app_mode'] == 'main':
             df_curr = df_curr[df_curr['TEMP_W_NUM'] <= limit_num].copy()
             df_curr.drop(columns=['TEMP_W_NUM'], inplace=True)
 
-    # --- HITUNG TOTAL (Revisi: Jika Complain, Sum Kolom J) ---
     if sel_cat == 'Complain' and 'JUMLAH_COMPLAIN' in df_curr.columns:
         total_ticket = int(df_curr['JUMLAH_COMPLAIN'].sum())
     else:
@@ -727,7 +709,7 @@ elif st.session_state['app_mode'] == 'main':
 
     avg_ticket = total_ticket / 4 if sel_cat != 'SparePart & Kaset' else 0
 
-    # --- MICRO METRICS SECTION (FIXED: COMPLAIN DIHITUNG SUM) ---
+    # --- MICRO METRICS SECTION ---
     if sel_cat != 'SparePart & Kaset':
         if sel_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
@@ -740,7 +722,6 @@ elif st.session_state['app_mode'] == 'main':
             df_met = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
             df_prev_met = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy() if prev_mon else pd.DataFrame()
 
-        # --- HITUNG METRIK (Revisi: Jika Complain, Sum Kolom J) ---
         if sel_cat == 'Complain':
             total_t = int(df_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_met.columns else 0
             prev_t = int(df_prev_met['JUMLAH_COMPLAIN'].sum()) if 'JUMLAH_COMPLAIN' in df_prev_met.columns else 0
@@ -753,7 +734,6 @@ elif st.session_state['app_mode'] == 'main':
         t_icon = "▲" if diff_t > 0 else ("▼" if diff_t < 0 else "•")
         t_color = "#DC2626" if diff_t > 0 else ("#16A34A" if diff_t < 0 else "#64748B")
 
-        # Style
         pill_bg = "#1E293B" if use_exec_mode else "#FFFFFF"
         pill_text = "#F8FAFC" if use_exec_mode else "#1E293B"
         pill_border = "#334155" if use_exec_mode else "#E2E8F0"
@@ -774,18 +754,12 @@ elif st.session_state['app_mode'] == 'main':
         """
         st.markdown(metric_html, unsafe_allow_html=True)
 
-    # --- 7. MAIN CONTENT RENDERING ---
-
-    # INI KODE PENDORONG TABEL AGAR TIDAK MENIMPA JUDUL
+    # --- MAIN CONTENT RENDERING ---
     st.markdown("""
         <style>
-            /* Mencari semua elemen tabel dan mendorongnya turun */
             [data-testid="stDataFrame"], .stDataFrame {
                 margin-top: 6px !important;
             }
-            
-            /* Jika kau menggunakan judul manual (st.markdown) di atas tabel, 
-               kode ini juga akan memberikan jarak pada judul tersebut */
             .section-header {
                 margin-top: 5px !important;
             }
@@ -793,7 +767,6 @@ elif st.session_state['app_mode'] == 'main':
     """, unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True) 
 
-    # 🔥 LOGIKA PEWARNAAN W2 vs W1 (Chain Comparison) 🔥
     def apply_corporate_style(df_in):
         if not use_color: return df_in 
 
@@ -807,7 +780,6 @@ elif st.session_state['app_mode'] == 'main':
                 except: return 0
             
             col_names = row.index.tolist()
-            # Logika: Bandingkan Current vs Previous dalam urutan W1->W2->W3->W4
             chain = [('W2', 'W1'), ('W3', 'W2'), ('W4', 'W3')]
             
             for curr_col, prev_col in chain:
@@ -827,9 +799,7 @@ elif st.session_state['app_mode'] == 'main':
             return df_in.style.apply(style_logic, axis=1)
         except:
             return df_in
-    # =========================================================================
-    # 1. LAYOUT KHUSUS: SPAREPART & KASET (FIXED INDENTATION & COORDINATES)
-    # =========================================================================
+
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
         
@@ -848,7 +818,6 @@ elif st.session_state['app_mode'] == 'main':
                 return pd.DataFrame(subset_data.values[1:], columns=final_h)
             except: return pd.DataFrame()
 
-        # Data Kaset A12:L22
         subset_kaset = df_sp_raw.iloc[11:22, 0:12]
         manual_headers = ["CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT", "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT", "W2 DEC GOOD REJECT", "W2 DEC GOOD CURRENT", "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT", "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"]
         df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
@@ -875,30 +844,22 @@ elif st.session_state['app_mode'] == 'main':
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown('<div class="section-header">⚠️ Rekap Kaset Rusak</div>', unsafe_allow_html=True)
-                # TARGET: A24:F27
-                # Baris 24 (Excel) = Index 23
-                # Baris 27 (Excel) = Index 27 (Batas akhir)
-                # Kolom A:F = Index 0:6
                 df_rsk = make_unique_df(df_sp_raw.iloc[23:27, 0:6])
                 st.dataframe(df_rsk, use_container_width=True, hide_index=True)
                 
             with c2:
                 st.markdown('<div class="section-header">🧹 PM Kaset</div>', unsafe_allow_html=True)
-                # PM Kaset tetap di Index 31 (Baris 32 Excel)
                 df_pm = make_unique_df(df_sp_raw.iloc[31:39, 0:7])
                 st.dataframe(df_pm, use_container_width=True, hide_index=True)
 
-    
-    # =========================================================================
-    # 2. LAYOUT KHUSUS: MRI PROJECT (V61.46: FIX VARIABLE NAME TYPO)
-    # =========================================================================
+
     elif sel_cat == 'MRI Project':
         col_left, col_right = st.columns(2, gap="medium")
         df_mri_comp = df_curr[df_curr['KATEGORI'] == 'Complain'].copy()
         df_mri_df   = df_curr[df_curr['KATEGORI'] == 'DF Repeat'].copy()
         df_prev_comp = df_prev[df_prev['KATEGORI'] == 'Complain'].copy() if not df_prev.empty else pd.DataFrame()
         df_prev_df   = df_prev[df_prev['KATEGORI'] == 'DF Repeat'].copy() if not df_prev.empty else pd.DataFrame()
-        total_atm_mri = 34 # REVISI: JUMLAH ATM JADI 34 SESUAI REQUEST ABANG
+        total_atm_mri = 34 
 
         with col_left:
             st.markdown(f'<div class="section-header">🔴 Summary Problem TID MRI</div>', unsafe_allow_html=True)
@@ -918,7 +879,7 @@ elif st.session_state['app_mode'] == 'main':
             tier_data_mri = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t[0], p_t[1], p_t[2]], 'W1': [w1_t[0], w1_t[1], w1_t[2]], 'W2': [w2_t[0], w2_t[1], w2_t[2]], 'W3': [w3_t[0], w3_t[1], w3_t[2]], 'W4': [w4_t[0], w4_t[1], w4_t[2]], f'Σ {curr_mon_short}': [c_t[0], c_t[1], c_t[2]] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_mri))), use_container_width=True, hide_index=True)
             
-            # 3. TOP TID COMPLAIN (Color + Fix Logic)
+            # 3. TOP TID COMPLAIN
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top Complain Problem Terminal IDs</div>', unsafe_allow_html=True)
             if not df_mri_comp.empty:
                 piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
@@ -936,7 +897,6 @@ elif st.session_state['app_mode'] == 'main':
                 if len(event_mri_c.selection.rows) > 0:
                     idx = event_mri_c.selection.rows[0]; sel_tid = str(piv.iloc[idx]['TID']); sel_loc = piv.iloc[idx]['LOKASI']
                     time_str = "N/A"
-                    # FIXED VARIABLE NAME
                     tid_problems = df_mri_comp[df_mri_comp['TID'].astype(str) == sel_tid]
                     if not tid_problems.empty and 'TANGGAL' in tid_problems.columns:
                         last_date = tid_problems['TANGGAL'].max()
@@ -971,7 +931,7 @@ elif st.session_state['app_mode'] == 'main':
             tier_data_df = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t_df[0], p_t_df[1], p_t_df[2]], 'W1': [w1_t_d[0], w1_t_d[1], w1_t_d[2]], 'W2': [w2_t_d[0], w2_t_d[1], w2_t_d[2]], 'W3': [w3_t_d[0], w3_t_d[1], w3_t_d[2]], 'W4': [w4_t_d[0], w4_t_d[1], w4_t_d[2]], f'Σ {curr_mon_short}': [c_t_df[0], c_t_df[1], c_t_df[2]] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_df))), use_container_width=True, hide_index=True)
             
-            # 6. TOP TID DF (Color + Fix Logic)
+            # 6. TOP TID DF
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top DF Problem Terminal IDs</div>', unsafe_allow_html=True)
             if not df_mri_df.empty:
                 piv_df = df_mri_df.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
@@ -989,7 +949,6 @@ elif st.session_state['app_mode'] == 'main':
                 if len(event_mri_d.selection.rows) > 0:
                     idx = event_mri_d.selection.rows[0]; sel_tid = str(piv_df.iloc[idx]['TID']); sel_loc = piv_df.iloc[idx]['LOKASI']
                     time_str = "N/A"
-                    # FIXED VARIABLE NAME
                     tid_problems = df_mri_df[df_mri_df['TID'].astype(str) == sel_tid]
                     
                     if not tid_problems.empty:
@@ -1008,13 +967,10 @@ elif st.session_state['app_mode'] == 'main':
                             col_act = next((c for c in slm_det.columns if 'ACTION' in c.upper() or 'KETERANGAN' in c.upper()), None)
                             if col_act: st.dataframe(slm_det[['TGL_VISIT', col_act]], hide_index=True)
                         else: st.caption(f"No Visit Data for {sel_tid}")
-    # =========================================================================
-    # 3. LAYOUT STANDARD (ELASTIC, COMPLAIN, OUT FLM, DF REPEAT) - FINAL FIX
-    # =========================================================================
+    
     else:
         col_left, col_right = st.columns(2, gap="medium")
         
-        # --- KOLOM KIRI ---
         with col_left:
             # 1. OVERVIEW SUMMARY
             st.markdown(f'<div class="section-header">📊 {sel_cat} Overview Summary</div>', unsafe_allow_html=True)
@@ -1089,7 +1045,7 @@ elif st.session_state['app_mode'] == 'main':
             else:
                 st.markdown(f'<div class="section-header" style="margin-top: 15px;">📍 Top Impacted Locations</div>', unsafe_allow_html=True)
                 if not df_curr.empty and 'LOKASI' in df_curr.columns:
-                    loc_counts = df_curr['LOKASI'].value_counts().reset_index(); loc_counts.columns = ['LOKASI', 'FREQ']; top_locs = loc_counts.head(50) # Scrollable
+                    loc_counts = df_curr['LOKASI'].value_counts().reset_index(); loc_counts.columns = ['LOKASI', 'FREQ']; top_locs = loc_counts.head(50) 
                     st.dataframe(top_locs, height=200, column_config={ "LOKASI": st.column_config.TextColumn("Lokasi", width="medium"), "FREQ": st.column_config.ProgressColumn("Frekuensi", format="%d", min_value=0, max_value=int(top_locs['FREQ'].max()) if not top_locs.empty else 10, width="small") }, use_container_width=True, hide_index=True)
                 else: st.info("Data Lokasi tidak cukup.")
             
@@ -1103,7 +1059,6 @@ elif st.session_state['app_mode'] == 'main':
             st.markdown("""<style>div[data-testid="stTextArea"] > label {display: none !important;} div[data-testid="stTextArea"] {margin-top: 0px !important;}</style>""", unsafe_allow_html=True)
             st.text_area("Analisa Sheet:", value=str(current_analysis_text), height=input_height, label_visibility="collapsed", placeholder="Ketik analisa di sini...", key=f"analisa_box_{sel_cat}")
         
-        # --- KOLOM KANAN ---
         with col_right:
             # 1. TOP CRITICAL TIDS (SCROLLABLE ALL DATA)
             st.markdown(f'<div class="section-header">🔥 Critical TIDs (Scroll for More)</div>', unsafe_allow_html=True)
@@ -1126,7 +1081,6 @@ elif st.session_state['app_mode'] == 'main':
                 col_total = f'Σ {curr_mon_short}'; merged[col_total] = merged[weeks].sum(axis=1)
                 sort_col = col_total if sort_week == 'All Week' else sort_week
                 
-                # AMBIL SEMUA DATA (HAPUS .head(5))
                 top_all_df = merged.sort_values(sort_col, ascending=False).reset_index(drop=True)
                 
                 cols_to_convert = [prev_mon_short] + weeks + [col_total]
@@ -1136,8 +1090,8 @@ elif st.session_state['app_mode'] == 'main':
                 display_cols = ['TID', 'LOKASI', 'CABANG'] + cols_to_convert
                 col_config = {
                     "TID": st.column_config.TextColumn("TID", width="small"), 
-                    "LOKASI": st.column_config.TextColumn("LOKASI", width="medium"), # Fixed Scroll
-                    "CABANG": st.column_config.TextColumn("CABANG", width="small"), # Fixed Scroll
+                    "LOKASI": st.column_config.TextColumn("LOKASI", width="medium"), 
+                    "CABANG": st.column_config.TextColumn("CABANG", width="small"), 
                     prev_mon_short: st.column_config.TextColumn(prev_mon_short, width="small"), 
                     "W1": st.column_config.TextColumn("W1", width="small"), 
                     "W2": st.column_config.TextColumn("W2", width="small"),
@@ -1145,7 +1099,6 @@ elif st.session_state['app_mode'] == 'main':
                     "W4": st.column_config.TextColumn("W4", width="small"), 
                     col_total: st.column_config.TextColumn(col_total, width="small")
                 }
-                # HEIGHT DISET 220px AGAR SCROLLABLE
                 event = st.dataframe(apply_corporate_style(clean_zeros(top_all_df[display_cols])), height=220, column_config=col_config, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
                 
                 if len(event.selection.rows) > 0:
@@ -1169,7 +1122,7 @@ elif st.session_state['app_mode'] == 'main':
                             else: st.dataframe(slm_detail, use_container_width=True, hide_index=True)
                         else: st.caption("Belum ada data kunjungan bulan ini.")
 
-            # 2. BRANCH TREND VISUALIZATION (CHART: TOP 5, TABLE: ALL SCROLLABLE)
+            # 2. BRANCH TREND VISUALIZATION
             st.markdown(f'<div class="section-header" style="margin-top: 10px; margin-bottom: 0px !important;">📈 Branch Trend Visualization</div>', unsafe_allow_html=True) 
             if 'CABANG' in df_curr.columns:
                 def agg_branch_piv(df_in):
@@ -1189,10 +1142,7 @@ elif st.session_state['app_mode'] == 'main':
                 merged_cab = pd.merge(p_cab, branch_prev, on='CABANG', how='left').fillna(0)
                 col_total_cab = f'Σ {curr_mon_short}'; merged_cab[col_total_cab] = merged_cab[weeks].sum(axis=1)
                 
-                # DATA UNTUK GRAFIK (TETAP TOP 5 AGAR TIDAK KUSUT)
                 top_5_cab_chart = merged_cab.sort_values(col_total_cab, ascending=False).head(5)
-                
-                # DATA UNTUK TABEL (ALL DATA - SCROLLABLE)
                 top_all_cab_table = merged_cab.sort_values(col_total_cab, ascending=False)
                 
                 week_pair = comp_mode.split(' vs ')
@@ -1218,23 +1168,4 @@ elif st.session_state['app_mode'] == 'main':
                     if c in top_cab_str.columns: top_cab_str[c] = top_cab_str[c].astype(int).astype(str)
                 cols_to_show = ['CABANG'] + [c for c in final_cols_cab if c in top_cab_str.columns]
                 
-                # TABEL SCROLLABLE (HEIGHT 200px)
-
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
