@@ -204,16 +204,6 @@ def load_data():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "ERROR 🔴"
 
 # --- HELPER FUNCTIONS (GLOBAL) ---
-def calculate_risk_tiers(df_target):
-    if df_target.empty: return 0, 0, 0
-    # FIX: Pastikan menghitung SUM complain per TID
-    if 'JUMLAH_COMPLAIN' in df_target.columns:
-         counts = df_target.groupby('TID')['JUMLAH_COMPLAIN'].sum()
-    else:
-         counts = df_target['TID'].value_counts() if 'TID' in df_target.columns else []
-         
-    return (counts == 1).sum(), ((counts >= 2) & (counts <= 3)).sum(), (counts > 3).sum()
-
 def get_prev_month_full_en(curr_month_en):
     months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
     try: idx = months.index(curr_month_en); return months[idx - 1] if idx > 0 else months[11]
@@ -874,6 +864,20 @@ elif st.session_state['app_mode'] == 'main':
         df_prev_df   = df_prev[df_prev['KATEGORI'] == 'DF Repeat'].copy() if not df_prev.empty else pd.DataFrame()
         total_atm_mri = 34 
 
+        # --- FUNGSI KHUSUS UNTUK MEMBEDAKAN CARA HITUNG TIER MRI ---
+        def calc_mri_tiers_fixed(dframe, category_type):
+            if dframe.empty: return 0, 0, 0
+            
+            # Jika Complain: SUM kolom JUMLAH_COMPLAIN
+            if category_type == 'Complain' and 'JUMLAH_COMPLAIN' in dframe.columns:
+                counts = dframe.groupby('TID')['JUMLAH_COMPLAIN'].sum()
+            
+            # Jika DF Repeat (atau lainnya): HITUNG FREKUENSI TID (Baris)
+            else:
+                counts = dframe['TID'].value_counts()
+                
+            return (counts == 1).sum(), ((counts >= 2) & (counts <= 3)).sum(), (counts > 3).sum()
+
         with col_left:
             st.markdown(f'<div class="section-header">🔴 Summary Problem TID MRI</div>', unsafe_allow_html=True)
             sum_data = {"TOTAL ATM": [total_atm_mri], "Complain": [len(df_mri_comp)], "DF": [len(df_mri_df)]}
@@ -884,18 +888,26 @@ elif st.session_state['app_mode'] == 'main':
             jml_data = { "TOTAL ATM": [total_atm_mri], f"{prev_mon_short}": [len(df_prev_comp)], "W1": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W1'])], "W2": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W2'])], "W3": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W3'])], "W4": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W4'])], f"Σ {curr_mon_short}": [len(df_mri_comp)] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(jml_data))), use_container_width=True, hide_index=True)
             
-            # 2. TIERING COMPLAIN (Color)
+            # 2. TIERING COMPLAIN (Pakai Logic 'Complain' -> SUM)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">⚠️ Tiering Complain</div>', unsafe_allow_html=True)
-            p_t = calculate_risk_tiers(df_prev_comp); c_t = calculate_risk_tiers(df_mri_comp)
-            def get_w_risk_mri(df_target, w): return calculate_risk_tiers(df_target[df_target['WEEK'] == w])
-            w1_t = get_w_risk_mri(df_mri_comp, 'W1'); w2_t = get_w_risk_mri(df_mri_comp, 'W2'); w3_t = get_w_risk_mri(df_mri_comp, 'W3'); w4_t = get_w_risk_mri(df_mri_comp, 'W4')
+            p_t = calc_mri_tiers_fixed(df_prev_comp, 'Complain'); c_t = calc_mri_tiers_fixed(df_mri_comp, 'Complain')
+            def get_w_risk_mri(df_target, w, cat_type): return calc_mri_tiers_fixed(df_target[df_target['WEEK'] == w], cat_type)
+            
+            w1_t = get_w_risk_mri(df_mri_comp, 'W1', 'Complain'); w2_t = get_w_risk_mri(df_mri_comp, 'W2', 'Complain')
+            w3_t = get_w_risk_mri(df_mri_comp, 'W3', 'Complain'); w4_t = get_w_risk_mri(df_mri_comp, 'W4', 'Complain')
+            
             tier_data_mri = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t[0], p_t[1], p_t[2]], 'W1': [w1_t[0], w1_t[1], w1_t[2]], 'W2': [w2_t[0], w2_t[1], w2_t[2]], 'W3': [w3_t[0], w3_t[1], w3_t[2]], 'W4': [w4_t[0], w4_t[1], w4_t[2]], f'Σ {curr_mon_short}': [c_t[0], c_t[1], c_t[2]] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_mri))), use_container_width=True, hide_index=True)
             
             # 3. TOP TID COMPLAIN
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top Complain Problem Terminal IDs</div>', unsafe_allow_html=True)
             if not df_mri_comp.empty:
-                piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
+                # Pivot Complain pakai Sum JUMLAH_COMPLAIN
+                if 'JUMLAH_COMPLAIN' in df_mri_comp.columns:
+                    piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', values='JUMLAH_COMPLAIN', aggfunc='sum', fill_value=0).reset_index()
+                else:
+                    piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
+
                 for w in ['W1','W2','W3','W4']: 
                     if w not in piv.columns: piv[w] = 0
                 piv['Total'] = piv[['W1','W2','W3','W4']].sum(axis=1)
@@ -937,16 +949,22 @@ elif st.session_state['app_mode'] == 'main':
             jml_df_data = { "TOTAL ATM": [total_atm_mri], f"{prev_mon_short}": [len(df_prev_df)], "W1": [len(df_mri_df[df_mri_df['WEEK'] == 'W1'])], "W2": [len(df_mri_df[df_mri_df['WEEK'] == 'W2'])], "W3": [len(df_mri_df[df_mri_df['WEEK'] == 'W3'])], "W4": [len(df_mri_df[df_mri_df['WEEK'] == 'W4'])], f"Σ {curr_mon_short}": [len(df_mri_df)] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(jml_df_data))), use_container_width=True, hide_index=True)
             
-            # 5. TIERING DF (Color)
+            # 5. TIERING DF (Pakai Logic 'DF' -> COUNT BARIS)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">⚠️ Tiering DF Repeat</div>', unsafe_allow_html=True)
-            p_t_df = calculate_risk_tiers(df_prev_df); c_t_df = calculate_risk_tiers(df_mri_df)
-            w1_t_d = get_w_risk_mri(df_mri_df, 'W1'); w2_t_d = get_w_risk_mri(df_mri_df, 'W2'); w3_t_d = get_w_risk_mri(df_mri_df, 'W3'); w4_t_d = get_w_risk_mri(df_mri_df, 'W4')
+            
+            # Fix: Gunakan 'DF' sebagai tipe kategori agar dihitung pakai COUNT, bukan SUM
+            p_t_df = calc_mri_tiers_fixed(df_prev_df, 'DF'); c_t_df = calc_mri_tiers_fixed(df_mri_df, 'DF')
+            
+            w1_t_d = get_w_risk_mri(df_mri_df, 'W1', 'DF'); w2_t_d = get_w_risk_mri(df_mri_df, 'W2', 'DF')
+            w3_t_d = get_w_risk_mri(df_mri_df, 'W3', 'DF'); w4_t_d = get_w_risk_mri(df_mri_df, 'W4', 'DF')
+            
             tier_data_df = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t_df[0], p_t_df[1], p_t_df[2]], 'W1': [w1_t_d[0], w1_t_d[1], w1_t_d[2]], 'W2': [w2_t_d[0], w2_t_d[1], w2_t_d[2]], 'W3': [w3_t_d[0], w3_t_d[1], w3_t_d[2]], 'W4': [w4_t_d[0], w4_t_d[1], w4_t_d[2]], f'Σ {curr_mon_short}': [c_t_df[0], c_t_df[1], c_t_df[2]] }
             st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_df))), use_container_width=True, hide_index=True)
             
             # 6. TOP TID DF
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top DF Problem Terminal IDs</div>', unsafe_allow_html=True)
             if not df_mri_df.empty:
+                # Pivot DF pakai Count (size)
                 piv_df = df_mri_df.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
                 for w in ['W1','W2','W3','W4']: 
                     if w not in piv_df.columns: piv_df[w] = 0
@@ -1193,7 +1211,3 @@ elif st.session_state['app_mode'] == 'main':
                 cols_to_show = ['CABANG'] + [c for c in final_cols_cab if c in top_cab_str.columns]
                 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
-
-
-
-
