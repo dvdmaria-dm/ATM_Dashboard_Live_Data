@@ -228,64 +228,143 @@ if 'app_mode' not in st.session_state:
     st.session_state['app_mode'] = 'cover'
 
 # --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE) ---
+# --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE - ULTRA SLIM & ELEGANT) ---
 if st.session_state['app_mode'] == 'cover':
+    # CSS KHUSUS HALAMAN COVER
     st.markdown("""
         <style>
-            .cover-container {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                height: 75vh;
-                text-align: center;
+            /* 1. Ubah Background jadi Biru Gelap Command Center */
+            [data-testid="stAppViewContainer"] {
+                background-color: #00172E; 
+                background-image: linear-gradient(180deg, #00172E 0%, #000F1F 100%);
+                color: #FFFFFF;
             }
-            .big-title {
+            
+            /* 2. Sembunyikan Header Bawaan */
+            [data-testid="stHeader"] { visibility: hidden; }
+            
+            /* 3. Styling Judul Utama (Kuning Underline) */
+            .cover-title {
                 font-family: 'Helvetica', sans-serif;
-                font-weight: 900;
-                font-size: 60px;
-                background: -webkit-linear-gradient(#0F172A, #2563EB);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin: 0;
+                font-size: 38px;
+                font-weight: 700;
+                color: #FFC107; /* Kuning Emas */
+                text-transform: uppercase;
+                border-bottom: 3px solid #FFC107;
+                display: inline-block;
+                padding-bottom: 5px;
+                margin-bottom: 20px;
+                letter-spacing: 1px;
             }
-            .subtitle {
-                font-size: 20px;
-                color: #64748B;
-                letter-spacing: 2px;
-                font-weight: 500;
+            
+            /* 4. Sub-Title & Info */
+            .cover-subtitle {
+                font-size: 18px;
+                font-weight: 400;
+                color: #FFFFFF;
                 margin-bottom: 40px;
+                letter-spacing: 1.5px;
             }
-            .presenter-box {
-                margin-top: 50px;
-                padding-top: 20px;
-                border-top: 1px solid #E2E8F0;
-                width: 450px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
+            .cover-info {
+                font-size: 14px;
+                color: #E2E8F0;
+                margin-bottom: 8px;
+                font-family: 'Inter', sans-serif;
+            }
+            
+            /* 5. Styling Tombol Navigasi (Kotak Outline - Lebih Slim) */
+            div.stButton > button {
+                border-radius: 4px;
+                border: 1px solid #0EA5E9; /* Biru Muda */
+                background-color: rgba(14, 165, 233, 0.05); /* Transparan */
+                color: #0EA5E9;
+                text-align: left;
+                padding-left: 15px;
+                font-weight: 600;
+                height: 45px; /* Sedikit lebih pendek lagi */
+                text-transform: uppercase;
+                transition: all 0.3s ease;
+                font-size: 12px; /* Font diperhalus */
+            }
+            div.stButton > button:hover {
+                border-color: #FFC107;
+                color: #FFC107;
+                background-color: rgba(255, 193, 7, 0.1);
+            }
+            
+            /* 6. HACK: Tombol Pertama (MRI) jadi Orange Solid */
+            [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button {
+                background-color: #D97706; /* Orange */
+                color: white;
+                border: none;
+                font-weight: 800;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            }
+            [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button:hover {
+                background-color: #B45309;
+                color: white;
+                transform: translateY(-1px);
             }
         </style>
     """, unsafe_allow_html=True)
 
-    hari_ini = datetime.now().strftime("%d %B %Y")
+    # --- LAYOUT DENGAN SPACER YANG LEBIH LUAS ---
+    # Rasio Baru: Tombol (1.8) jauh lebih kecil dari sebelumnya (2.5)
+    # Spacer kiri-kanan diperlebar (1.2) supaya konten makin di tengah
+    c_space_l, c1, c_gap, c2, c_space_r = st.columns([1.2, 4.0, 0.4, 1.8, 1.2])
     
-    html_markup = '<div class="cover-container">'
-    html_markup += '<div style="font-size: 80px; margin-bottom: 10px;">🏦</div>'
-    html_markup += '<div class="big-title">ATM PERFORMANCE</div>'
-    html_markup += '<div class="big-title" style="font-size: 40px; margin-top: -15px;">MONITORING SYSTEM</div>'
-    html_markup += '<p class="subtitle">EXECUTIVE SUMMARY & STRATEGIC INSIGHTS</p>'
-    html_markup += '<div class="presenter-box">'
-    html_markup += '<p style="margin-bottom: 5px; font-weight: bold; font-size: 12px; letter-spacing: 1px; color: #94A3B8;">PRESENTED BY</p>'
-    html_markup += '<p style="font-size: 24px; font-weight: 800; color: #1E293B; margin: 0;">DAVID JAMES SIMANJUNTAK</p>'
-    html_markup += '<p style="font-size: 14px; color: #64748B; margin-top: 5px;">DATA ANALYST & STRATEGY</p>'
-    html_markup += '<p style="font-size: 12px; color: #94A3B8; margin-top: 25px;">' + hari_ini + '</p>'
-    html_markup += '</div></div>'
-    
-    st.markdown(html_markup, unsafe_allow_html=True)
+    with c1:
+        st.markdown('<div style="height: 140px;"></div>', unsafe_allow_html=True) # Spacer Atas
+        # JUDUL WEEKLY
+        st.markdown('<div class="cover-title">WEEKLY PERFORMANCE REVIEW</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cover-subtitle">ATM MONITORING DIVISION</div>', unsafe_allow_html=True)
+        
+        # Info Presenter & Tanggal
+        st.markdown('<div style="height: 30px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="cover-info">Presenter : <b>Command Center BRI</b></div>', unsafe_allow_html=True)
+        
+        # Tanggal Otomatis
+        curr_date = datetime.now().strftime("%A, %d %B %Y")
+        st.markdown(f'<div class="cover-info">{curr_date}</div>', unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([5, 2, 5])
-    with col2:
-        if st.button("🚀 LAUNCH DASHBOARD", use_container_width=True, type="primary"):
+    with c2:
+        st.markdown('<div style="height: 120px;"></div>', unsafe_allow_html=True) # Spacer agar sejajar visual
+        
+        # --- TOMBOL NAVIGASI MENU (ULTRA COMPACT) ---
+        
+        # 1. MRI PROJECT (Orange)
+        if st.button("⭐ PROJECT MRI", use_container_width=True):
+            st.session_state['nav_cat'] = 'MRI Project'
+            st.session_state['app_mode'] = 'main'
+            st.rerun()
+            
+        # 2. ELASTIC
+        if st.button("01 | ELASTIC PROBLEM", use_container_width=True):
+            st.session_state['nav_cat'] = 'Elastic'
+            st.session_state['app_mode'] = 'main'
+            st.rerun()
+
+        # 3. COMPLAIN
+        if st.button("02 | COMPLAIN HANDLING", use_container_width=True):
+            st.session_state['nav_cat'] = 'Complain'
+            st.session_state['app_mode'] = 'main'
+            st.rerun()
+
+        # 4. DF REPEAT
+        if st.button("03 | DF REPEATED ISSUE", use_container_width=True):
+            st.session_state['nav_cat'] = 'DF Repeat'
+            st.session_state['app_mode'] = 'main'
+            st.rerun()
+            
+        # 5. OUT FLM
+        if st.button("04 | OUT FLM TRACKING", use_container_width=True):
+            st.session_state['nav_cat'] = 'OUT Flm'
+            st.session_state['app_mode'] = 'main'
+            st.rerun()
+
+        # 6. SPAREPART
+        if st.button("05 | SPAREPART & KASET", use_container_width=True):
+            st.session_state['nav_cat'] = 'SparePart & Kaset'
             st.session_state['app_mode'] = 'main'
             st.rerun()
 
