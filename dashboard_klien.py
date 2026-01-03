@@ -68,7 +68,7 @@ except Exception as e:
 # =========================================================================
 # 3. FUNGSI LOAD DATA (DENGAN LOGIKA FORMATTING KETAT)
 # =========================================================================
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=14400, show_spinner=False)
 def load_data():
     # File Backup Lokal
     backup_file = 'DATA_MASTER_ATM.xlsx'
@@ -1193,6 +1193,7 @@ elif st.session_state['app_mode'] == 'main':
                 cols_to_show = ['CABANG'] + [c for c in final_cols_cab if c in top_cab_str.columns]
                 
                 st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+
 
 
 
