@@ -313,7 +313,17 @@ if st.session_state['app_mode'] == 'cover':
     c_space_l, c1, c_gap, c2, c_space_r = st.columns([1.2, 4.0, 0.4, 1.8, 1.2])
     
     with c1:
-        st.markdown('<div style="height: 140px;"></div>', unsafe_allow_html=True) # Spacer Atas
+        st.markdown('<div style="height: 60px;"></div>', unsafe_allow_html=True) # Spacer Atas
+        
+        # --- [NEW] LOGO DISPLAY LOGIC ---
+        logo_file = "Logo Command Center.png"
+        if os.path.exists(logo_file):
+            st.image(logo_file, width=150)
+            st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True) # Spacer kecil setelah logo
+        else:
+            # Fallback jika gambar belum diupload user
+            st.warning(f"⚠️ Logo not found: {logo_file}")
+
         # JUDUL WEEKLY
         st.markdown('<div class="cover-title">WEEKLY PERFORMANCE REVIEW</div>', unsafe_allow_html=True)
         st.markdown('<div class="cover-subtitle">ATM MONITORING DIVISION</div>', unsafe_allow_html=True)
@@ -408,7 +418,8 @@ elif st.session_state['app_mode'] == 'main':
         else:
             df_target = df[df['KATEGORI'] == h_cat].copy()
 
-        updates = []
+        # --- INISIALISASI LIST UPDATES DENGAN SIGNATURE MESSAGE (URUTAN 0) ---
+        updates = [f"<span style='font-family: monospace; color: #64748B;'>&gt;_ SYSTEM_ORIGIN:</span> <span style='color: #1E293B; font-weight: 800; letter-spacing: 0.5px;'>COMMAND CENTER LT 3 GEDUNG BRI</span>"]
         
         if not df_target.empty:
             months_list = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -517,7 +528,7 @@ elif st.session_state['app_mode'] == 'main':
                         loc_info = get_loc_info(best_t['TID'])
                         updates.append(f"<span style='color: #64748B;'>[TID DROP] Unit <b>{best_t['TID']}</b> [{loc_info}] TURUN <span style='color: #16A34A; font-weight: 800;'>{int(best_t['DIFF'])}</span> Problem ({best_t['PCT']:.0f}%) Total: {best_t['VAL']}x.</span>")
 
-        # UPDATE GLOBAL
+        # UPDATE GLOBAL ASSET (Ditaruh di akhir)
         updates.append(f"<span style='color: #64748B;'>🌍 GLOBAL ASSETS: <span style='color: #1E293B; font-weight: 800;'>{total_armada}</span> Units Active</span>")
 
         msg_count = len(updates)
@@ -543,7 +554,7 @@ elif st.session_state['app_mode'] == 'main':
         st.markdown("""
         <div style="line-height: 1.1;">
             <div class="main-title" style="font-size: 30px !important;">ATM WEEKLY PERFORMANCE</div>
-            <div class="sub-title" style="font-size: 5px !important; margin-top: -2px;">PT KELOLA JASA ARTA</div>
+            <div class="sub-title" style="font-size: 10px !important; color: #64748B; margin-top: -2px;">PT KELOLA JASA ARTA</div>
         </div>
         """, unsafe_allow_html=True)
 
