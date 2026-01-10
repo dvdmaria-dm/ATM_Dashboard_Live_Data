@@ -318,7 +318,7 @@ if st.session_state['app_mode'] == 'cover':
         # --- [NEW] LOGO DISPLAY LOGIC ---
         logo_file = "Logo Command Center.png"
         if os.path.exists(logo_file):
-            st.image(logo_file, width=150)
+            st.image(logo_file, width=400)
             st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True) # Spacer kecil setelah logo
         else:
             # Fallback jika gambar belum diupload user
