@@ -1419,17 +1419,37 @@ elif st.session_state['app_mode'] == 'main':
                 week_pair = comp_mode.split(' vs ')
                 df_melt = top_5_cab_chart[['CABANG'] + week_pair].melt(id_vars='CABANG', var_name='Week', value_name='Total')
                 
-                if use_exec_mode: chart_bg_color = "#1E293B"; c_text = "#F8FAFC"; c_grid = "rgba(255, 255, 255, 0.1)"; current_chart_pal = ['#F59E0B', '#38BDF8'] 
-                else: chart_bg_color = "#FFFFFF"; c_text = "#1E293B"; c_grid = "#E2E8F0"; current_chart_pal = ['#0F172A', '#60A5FA'] 
+                # --- CHART STYLING (ALWAYS WHITE / CLEAN) ---
+                # User Request: Background putih agar tidak norak
+                chart_bg_color = "#FFFFFF"
+                c_text = "#1E293B"
+                c_grid = "#E2E8F0"
+                current_chart_pal = ['#0F172A', '#60A5FA'] # Navy & Light Blue
                 
                 fig = px.line(df_melt, x='CABANG', y='Total', color='Week', markers=True, text='Total', color_discrete_sequence=current_chart_pal)
-                fig.update_layout(height=180, margin=dict(l=10, r=0, t=35, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Inter", size=11, color=c_text), xaxis=dict(showgrid=True, gridcolor=c_grid, title=None, tickfont=dict(color=c_text)),
-                    yaxis=dict(showgrid=True, gridcolor=c_grid, title=None, zeroline=False, showticklabels=False), 
-                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1, title=None, font=dict(color=c_text)), hovermode="x unified")
-                fig.update_traces(mode='lines+markers+text', line=dict(width=2.5), marker=dict(size=7, symbol='circle', line=dict(width=1.5, color=c_text)),
-                    textposition="top center", textfont=dict(size=12, color=c_text, family="Inter", weight="bold"), cliponaxis=False)
                 
+                # UPDATE LAYOUT: ALWAYS WHITE BACKGROUND
+                fig.update_layout(
+                    height=180, 
+                    margin=dict(l=10, r=0, t=35, b=10), 
+                    paper_bgcolor=chart_bg_color, # FORCE WHITE
+                    plot_bgcolor=chart_bg_color,  # FORCE WHITE
+                    font=dict(family="Inter", size=11, color=c_text), 
+                    xaxis=dict(showgrid=True, gridcolor=c_grid, title=None, tickfont=dict(color=c_text)),
+                    yaxis=dict(showgrid=True, gridcolor=c_grid, title=None, zeroline=False, showticklabels=False), 
+                    legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1, title=None, font=dict(color=c_text)), 
+                    hovermode="x unified"
+                )
+                fig.update_traces(
+                    mode='lines+markers+text', 
+                    line=dict(width=2.5), 
+                    marker=dict(size=7, symbol='circle', line=dict(width=1.5, color=c_text)),
+                    textposition="top center", 
+                    textfont=dict(size=12, color=c_text, family="Inter", weight="bold"), 
+                    cliponaxis=False
+                )
+                
+                # INJECT CSS TO MATCH WHITE CONTAINER
                 st.markdown(f"""<style>[data-testid="stPlotlyChart"] {{ background-color: {chart_bg_color} !important; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); width: 100% !important; overflow: hidden !important; margin-top: -10px !important;}} iframe[title="streamlit_plotly_events.plotly_chart"] {{width: 100% !important;}}</style>""", unsafe_allow_html=True)
                 st.plotly_chart(fig, use_container_width=True)
                 
