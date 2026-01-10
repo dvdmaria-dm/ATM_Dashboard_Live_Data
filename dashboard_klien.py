@@ -227,7 +227,6 @@ if df.empty:
 if 'app_mode' not in st.session_state:
     st.session_state['app_mode'] = 'cover'
 
-# --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE) ---
 # --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE - ULTRA SLIM & ELEGANT) ---
 if st.session_state['app_mode'] == 'cover':
     # CSS KHUSUS HALAMAN COVER
@@ -849,38 +848,53 @@ elif st.session_state['app_mode'] == 'main':
     """, unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 5px;'></div>", unsafe_allow_html=True) 
 
-    def apply_corporate_style(df_in):
-        if not use_color: return df_in 
+    # --- UNIVERSAL STYLING FUNCTION (FIXED BUG) ---
+    def get_styled_dataframe(df_in):
+        # 1. Create Base Styler
+        styler = df_in.style
 
-        def style_logic(row):
-            color_bad = 'color: #B91C1C; font-weight: 700;' 
-            color_good = 'color: #15803D; font-weight: 700;' 
-            styles = [''] * len(row)
+        # 2. Logic Warna Merah/Hijau (Jika toggle ON)
+        if use_color:
+            def style_logic(row):
+                color_bad = 'color: #B91C1C; font-weight: 700;' 
+                color_good = 'color: #15803D; font-weight: 700;' 
+                styles = [''] * len(row)
+                
+                def get_val(val):
+                    try: return float(val) if val != "" else 0
+                    except: return 0
+                
+                col_names = row.index.tolist()
+                chain = [('W2', 'W1'), ('W3', 'W2'), ('W4', 'W3')]
+                
+                for curr_col, prev_col in chain:
+                    if curr_col in col_names and prev_col in col_names:
+                        try:
+                            curr_idx = col_names.index(curr_col)
+                            prev_idx = col_names.index(prev_col)
+                            curr_val = get_val(row[curr_idx])
+                            prev_val = get_val(row[prev_idx])
+                            
+                            if curr_val > prev_val: styles[curr_idx] = color_bad
+                            elif curr_val < prev_val: styles[curr_idx] = color_good
+                        except: pass
+                return styles
             
-            def get_val(val):
-                try: return float(val) if val != "" else 0
-                except: return 0
-            
-            col_names = row.index.tolist()
-            chain = [('W2', 'W1'), ('W3', 'W2'), ('W4', 'W3')]
-            
-            for curr_col, prev_col in chain:
-                if curr_col in col_names and prev_col in col_names:
-                    try:
-                        curr_idx = col_names.index(curr_col)
-                        prev_idx = col_names.index(prev_col)
-                        curr_val = get_val(row[curr_idx])
-                        prev_val = get_val(row[prev_idx])
-                        
-                        if curr_val > prev_val: styles[curr_idx] = color_bad
-                        elif curr_val < prev_val: styles[curr_idx] = color_good
-                    except: pass
-            return styles
+            try:
+                styler = styler.apply(style_logic, axis=1)
+            except: pass
 
-        try:
-            return df_in.style.apply(style_logic, axis=1)
-        except:
-            return df_in
+        # 3. Logic Warna Kolom (Dec & Jan) - UNIVERSAL (Always On)
+        # Prev Month (Dec) -> Very subtle Grey
+        if prev_mon_short in df_in.columns:
+            styler = styler.map(lambda x: 'background-color: #F9FAFB; color: #444;', subset=[prev_mon_short])
+        
+        # Current Total (Jan) -> Very subtle Blue + Bold
+        col_total_curr = f'Σ {curr_mon_short}'
+        if col_total_curr in df_in.columns:
+            styler = styler.map(lambda x: 'background-color: #F0F9FF; color: #000; font-weight: 600;', subset=[col_total_curr])
+
+        return styler
 
     if sel_cat == 'SparePart & Kaset':
         st.markdown("""<style>[data-testid="stDataFrame"] th { font-size: 10px !important; background-color: #F8FAFC !important; }[data-testid="stDataFrame"] td { font-size: 10px !important; }</style>""", unsafe_allow_html=True)
@@ -965,9 +979,9 @@ elif st.session_state['app_mode'] == 'main':
             # 1. JML COMPLAIN (Color)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">📊 JML Complain</div>', unsafe_allow_html=True)
             jml_data = { "TOTAL ATM": [total_atm_mri], f"{prev_mon_short}": [len(df_prev_comp)], "W1": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W1'])], "W2": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W2'])], "W3": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W3'])], "W4": [len(df_mri_comp[df_mri_comp['WEEK'] == 'W4'])], f"Σ {curr_mon_short}": [len(df_mri_comp)] }
-            st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(jml_data))), use_container_width=True, hide_index=True)
+            st.dataframe(get_styled_dataframe(clean_zeros(pd.DataFrame(jml_data))), use_container_width=True, hide_index=True)
             
-            # 2. TIERING COMPLAIN (Pakai Logic 'Complain' -> SUM)
+            # 2. TIERING COMPLAIN (Pakai Logic 'Complain' -> SUM + ADD TOTAL ROW)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">⚠️ Tiering Complain</div>', unsafe_allow_html=True)
             p_t = calc_mri_tiers_fixed(df_prev_comp, 'Complain'); c_t = calc_mri_tiers_fixed(df_mri_comp, 'Complain')
             def get_w_risk_mri(df_target, w, cat_type): return calc_mri_tiers_fixed(df_target[df_target['WEEK'] == w], cat_type)
@@ -975,28 +989,100 @@ elif st.session_state['app_mode'] == 'main':
             w1_t = get_w_risk_mri(df_mri_comp, 'W1', 'Complain'); w2_t = get_w_risk_mri(df_mri_comp, 'W2', 'Complain')
             w3_t = get_w_risk_mri(df_mri_comp, 'W3', 'Complain'); w4_t = get_w_risk_mri(df_mri_comp, 'W4', 'Complain')
             
-            tier_data_mri = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t[0], p_t[1], p_t[2]], 'W1': [w1_t[0], w1_t[1], w1_t[2]], 'W2': [w2_t[0], w2_t[1], w2_t[2]], 'W3': [w3_t[0], w3_t[1], w3_t[2]], 'W4': [w4_t[0], w4_t[1], w4_t[2]], f'Σ {curr_mon_short}': [c_t[0], c_t[1], c_t[2]] }
-            st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_mri))), use_container_width=True, hide_index=True)
+            # Create Tier Data
+            col_tot = f'Σ {curr_mon_short}'
+            tier_data_mri = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t[0], p_t[1], p_t[2]], 'W1': [w1_t[0], w1_t[1], w1_t[2]], 'W2': [w2_t[0], w2_t[1], w2_t[2]], 'W3': [w3_t[0], w3_t[1], w3_t[2]], 'W4': [w4_t[0], w4_t[1], w4_t[2]], col_tot: [c_t[0], c_t[1], c_t[2]] }
+            df_tier_mri = pd.DataFrame(tier_data_mri)
             
-            # 3. TOP TID COMPLAIN
-            st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top Complain Problem Terminal IDs</div>', unsafe_allow_html=True)
-            if not df_mri_comp.empty:
-                # Pivot Complain pakai Sum JUMLAH_COMPLAIN
-                if 'JUMLAH_COMPLAIN' in df_mri_comp.columns:
-                    piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', values='JUMLAH_COMPLAIN', aggfunc='sum', fill_value=0).reset_index()
-                else:
-                    piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
+            # Add TOTAL UNIT Row
+            total_row_mri = {
+                'TIERING': 'TOTAL UNIT',
+                f'{prev_mon_short}': df_tier_mri[f'{prev_mon_short}'].sum(),
+                'W1': df_tier_mri['W1'].sum(),
+                'W2': df_tier_mri['W2'].sum(),
+                'W3': df_tier_mri['W3'].sum(),
+                'W4': df_tier_mri['W4'].sum(),
+                col_tot: df_tier_mri[col_tot].sum()
+            }
+            df_tier_mri = pd.concat([df_tier_mri, pd.DataFrame([total_row_mri])], ignore_index=True)
+            
+            # Styling for Total Row
+            def highlight_total_mri(x):
+                df1 = pd.DataFrame('', index=x.index, columns=x.columns)
+                try: df1.iloc[3, :] = 'font-weight: 800; background-color: rgba(128, 128, 128, 0.1); border-top: 2px solid #94A3B8;'
+                except: pass
+                return df1
 
+            st.dataframe(get_styled_dataframe(clean_zeros(df_tier_mri)).apply(highlight_total_mri, axis=None), use_container_width=True, hide_index=True)
+            
+            # 3. TOP TID COMPLAIN (MODIFIKASI: SCROLLABLE & SORT BY DROPDOWN)
+            st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top Complain Problem Terminal IDs</div>', unsafe_allow_html=True)
+            if not df_mri_comp.empty or not df_prev_comp.empty:
+                # A. Pivot Current Data (W1-W4)
+                if not df_mri_comp.empty:
+                    if 'JUMLAH_COMPLAIN' in df_mri_comp.columns:
+                        piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', values='JUMLAH_COMPLAIN', aggfunc='sum', fill_value=0).reset_index()
+                    else:
+                        piv = df_mri_comp.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
+                else:
+                    piv = pd.DataFrame(columns=['TID','LOKASI','CABANG','TYPE MRI'])
+
+                # B. Prepare Previous Data (Dec)
+                if not df_prev_comp.empty:
+                    if 'JUMLAH_COMPLAIN' in df_prev_comp.columns:
+                        prev_grp = df_prev_comp.groupby('TID')['JUMLAH_COMPLAIN'].sum().reset_index()
+                    else:
+                        prev_grp = df_prev_comp['TID'].value_counts().reset_index()
+                        prev_grp.columns = ['TID', 'JUMLAH_COMPLAIN']
+                    prev_grp.rename(columns={'JUMLAH_COMPLAIN': prev_mon_short}, inplace=True)
+                    
+                    # Merge Prev to Curr
+                    piv = pd.merge(piv, prev_grp[['TID', prev_mon_short]], on='TID', how='outer').fillna(0)
+                    
+                    # Fill Metadata for rows that only exist in Prev
+                    if 'LOKASI' in df_prev_comp.columns:
+                        lookup_loc = df_prev_comp.set_index('TID')['LOKASI'].to_dict()
+                        piv['LOKASI'] = piv.apply(lambda r: lookup_loc.get(r['TID'], '') if pd.isna(r['LOKASI']) or r['LOKASI'] == 0 else r['LOKASI'], axis=1)
+                    if 'CABANG' in df_prev_comp.columns:
+                        lookup_cab = df_prev_comp.set_index('TID')['CABANG'].to_dict()
+                        piv['CABANG'] = piv.apply(lambda r: lookup_cab.get(r['TID'], '') if pd.isna(r['CABANG']) or r['CABANG'] == 0 else r['CABANG'], axis=1)
+                else:
+                    piv[prev_mon_short] = 0
+
+                # Ensure Columns Exist
                 for w in ['W1','W2','W3','W4']: 
                     if w not in piv.columns: piv[w] = 0
-                piv['Total'] = piv[['W1','W2','W3','W4']].sum(axis=1)
-                sort_col_mri = sort_week if sort_week != 'All Week' else 'Total'
-                piv = piv.sort_values(sort_col_mri, ascending=False).head(8).reset_index(drop=True)
-                cols_show = ['TID', 'LOKASI', 'CABANG', 'TYPE MRI', 'W1', 'W2', 'W3', 'W4']
+                
+                # C. Calculate Total Current (Σ Jan)
+                col_total_curr = f'Σ {curr_mon_short}'
+                piv[col_total_curr] = piv[['W1','W2','W3','W4']].sum(axis=1)
+                
+                # D. Sorting Dynamic based on Week Dropdown
+                sort_col = col_total_curr # Default Sort
+                if sort_week != 'All Week' and sort_week in piv.columns:
+                    sort_col = sort_week
+                
+                # Sort descending based on selected criterion
+                piv = piv.sort_values(sort_col, ascending=False).reset_index(drop=True)
+                
+                # E. Column Ordering
+                cols_show = ['TID', 'LOKASI', 'CABANG', 'TYPE MRI', prev_mon_short, 'W1', 'W2', 'W3', 'W4', col_total_curr]
                 cols_final = [c for c in cols_show if c in piv.columns]
                 
+                # F. Display
                 df_disp = clean_zeros(piv[cols_final])
-                event_mri_c = st.dataframe(apply_corporate_style(df_disp), use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                
+                # Convert numbers to int before display
+                num_cols = [prev_mon_short, 'W1', 'W2', 'W3', 'W4', col_total_curr]
+                for c in num_cols:
+                    if c in df_disp.columns:
+                        df_disp[c] = pd.to_numeric(df_disp[c]).fillna(0).astype(int).astype(str).replace('0','')
+                
+                # G. APPLY SPECIAL STYLING (Column Backgrounds)
+                final_styler = get_styled_dataframe(df_disp)
+
+                # HEIGHT DISET 200px Biar Scrollable
+                event_mri_c = st.dataframe(final_styler, height=200, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
                 
                 if len(event_mri_c.selection.rows) > 0:
                     idx = event_mri_c.selection.rows[0]; sel_tid = str(piv.iloc[idx]['TID']); sel_loc = piv.iloc[idx]['LOKASI']
@@ -1026,35 +1112,96 @@ elif st.session_state['app_mode'] == 'main':
             # 4. JML DF (Color)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔵 JML DF Repeat</div>', unsafe_allow_html=True)
             jml_df_data = { "TOTAL ATM": [total_atm_mri], f"{prev_mon_short}": [len(df_prev_df)], "W1": [len(df_mri_df[df_mri_df['WEEK'] == 'W1'])], "W2": [len(df_mri_df[df_mri_df['WEEK'] == 'W2'])], "W3": [len(df_mri_df[df_mri_df['WEEK'] == 'W3'])], "W4": [len(df_mri_df[df_mri_df['WEEK'] == 'W4'])], f"Σ {curr_mon_short}": [len(df_mri_df)] }
-            st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(jml_df_data))), use_container_width=True, hide_index=True)
+            st.dataframe(get_styled_dataframe(clean_zeros(pd.DataFrame(jml_df_data))), use_container_width=True, hide_index=True)
             
-            # 5. TIERING DF (Pakai Logic 'DF' -> COUNT BARIS)
+            # 5. TIERING DF (Pakai Logic 'DF' -> COUNT BARIS + ADD TOTAL ROW)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">⚠️ Tiering DF Repeat</div>', unsafe_allow_html=True)
             
-            # Fix: Gunakan 'DF' sebagai tipe kategori agar dihitung pakai COUNT, bukan SUM
             p_t_df = calc_mri_tiers_fixed(df_prev_df, 'DF'); c_t_df = calc_mri_tiers_fixed(df_mri_df, 'DF')
             
             w1_t_d = get_w_risk_mri(df_mri_df, 'W1', 'DF'); w2_t_d = get_w_risk_mri(df_mri_df, 'W2', 'DF')
             w3_t_d = get_w_risk_mri(df_mri_df, 'W3', 'DF'); w4_t_d = get_w_risk_mri(df_mri_df, 'W4', 'DF')
             
-            tier_data_df = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t_df[0], p_t_df[1], p_t_df[2]], 'W1': [w1_t_d[0], w1_t_d[1], w1_t_d[2]], 'W2': [w2_t_d[0], w2_t_d[1], w2_t_d[2]], 'W3': [w3_t_d[0], w3_t_d[1], w3_t_d[2]], 'W4': [w4_t_d[0], w4_t_d[1], w4_t_d[2]], f'Σ {curr_mon_short}': [c_t_df[0], c_t_df[1], c_t_df[2]] }
-            st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(tier_data_df))), use_container_width=True, hide_index=True)
+            # Create Tier Data
+            col_tot = f'Σ {curr_mon_short}'
+            tier_data_df = { 'TIERING': ['1 kali', '2-3 kali', '> 3 kali'], f'{prev_mon_short}': [p_t_df[0], p_t_df[1], p_t_df[2]], 'W1': [w1_t_d[0], w1_t_d[1], w1_t_d[2]], 'W2': [w2_t_d[0], w2_t_d[1], w2_t_d[2]], 'W3': [w3_t_d[0], w3_t_d[1], w3_t_d[2]], 'W4': [w4_t_d[0], w4_t_d[1], w4_t_d[2]], col_tot: [c_t_df[0], c_t_df[1], c_t_df[2]] }
+            df_tier_df = pd.DataFrame(tier_data_df)
+
+            # Add TOTAL UNIT Row
+            total_row_df = {
+                'TIERING': 'TOTAL UNIT',
+                f'{prev_mon_short}': df_tier_df[f'{prev_mon_short}'].sum(),
+                'W1': df_tier_df['W1'].sum(),
+                'W2': df_tier_df['W2'].sum(),
+                'W3': df_tier_df['W3'].sum(),
+                'W4': df_tier_df['W4'].sum(),
+                col_tot: df_tier_df[col_tot].sum()
+            }
+            df_tier_df = pd.concat([df_tier_df, pd.DataFrame([total_row_df])], ignore_index=True)
+
+            st.dataframe(get_styled_dataframe(clean_zeros(df_tier_df)).apply(highlight_total_mri, axis=None), use_container_width=True, hide_index=True)
             
-            # 6. TOP TID DF
+            # 6. TOP TID DF (MODIFIKASI: SCROLLABLE & SORT BY DROPDOWN)
             st.markdown(f'<div class="section-header" style="margin-top:15px;">🔥 Top DF Problem Terminal IDs</div>', unsafe_allow_html=True)
-            if not df_mri_df.empty:
-                # Pivot DF pakai Count (size)
-                piv_df = df_mri_df.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
-                for w in ['W1','W2','W3','W4']: 
+            if not df_mri_df.empty or not df_prev_df.empty:
+                # A. Pivot Current (Count/Size)
+                if not df_mri_df.empty:
+                    piv_df = df_mri_df.pivot_table(index=['TID','LOKASI','CABANG','TYPE MRI'], columns='WEEK', aggfunc='size', fill_value=0).reset_index()
+                else:
+                    piv_df = pd.DataFrame(columns=['TID','LOKASI','CABANG','TYPE MRI'])
+
+                # B. Prepare Previous (Dec)
+                if not df_prev_df.empty:
+                    prev_grp_df = df_prev_df['TID'].value_counts().reset_index()
+                    prev_grp_df.columns = ['TID', prev_mon_short]
+                    
+                    # Merge
+                    piv_df = pd.merge(piv_df, prev_grp_df[['TID', prev_mon_short]], on='TID', how='outer').fillna(0)
+                    
+                    # Fill Metadata
+                    if 'LOKASI' in df_prev_df.columns:
+                        lookup_loc_df = df_prev_df.set_index('TID')['LOKASI'].to_dict()
+                        piv_df['LOKASI'] = piv_df.apply(lambda r: lookup_loc_df.get(r['TID'], '') if pd.isna(r['LOKASI']) or r['LOKASI'] == 0 else r['LOKASI'], axis=1)
+                    if 'CABANG' in df_prev_df.columns:
+                        lookup_cab_df = df_prev_df.set_index('TID')['CABANG'].to_dict()
+                        piv_df['CABANG'] = piv_df.apply(lambda r: lookup_cab_df.get(r['TID'], '') if pd.isna(r['CABANG']) or r['CABANG'] == 0 else r['CABANG'], axis=1)
+                else:
+                    piv_df[prev_mon_short] = 0
+
+                # Ensure Columns
+                for w in ['W1','W2','W3','W4']:
                     if w not in piv_df.columns: piv_df[w] = 0
-                piv_df['Total'] = piv_df[['W1','W2','W3','W4']].sum(axis=1)
-                sort_col_mri = sort_week if sort_week != 'All Week' else 'Total'
-                piv_df = piv_df.sort_values(sort_col_mri, ascending=False).head(4).reset_index(drop=True)
-                cols_show_df = ['TID', 'LOKASI', 'CABANG', 'TYPE MRI', 'W1', 'W2', 'W3', 'W4']
+
+                # C. Calculate Total Current (Σ Jan)
+                col_total_curr_df = f'Σ {curr_mon_short}'
+                piv_df[col_total_curr_df] = piv_df[['W1','W2','W3','W4']].sum(axis=1)
+
+                # D. Sorting Dynamic
+                sort_col_df = col_total_curr_df # Default
+                if sort_week != 'All Week' and sort_week in piv_df.columns:
+                    sort_col_df = sort_week
+                
+                # Sort descending
+                piv_df = piv_df.sort_values(sort_col_df, ascending=False).reset_index(drop=True)
+                
+                # E. Column Ordering
+                cols_show_df = ['TID', 'LOKASI', 'CABANG', 'TYPE MRI', prev_mon_short, 'W1', 'W2', 'W3', 'W4', col_total_curr_df]
                 cols_final_df = [c for c in cols_show_df if c in piv_df.columns]
                 
+                # F. Display
                 df_disp_df = clean_zeros(piv_df[cols_final_df])
-                event_mri_d = st.dataframe(apply_corporate_style(df_disp_df), use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                
+                # Convert numbers to int
+                num_cols_df = [prev_mon_short, 'W1', 'W2', 'W3', 'W4', col_total_curr_df]
+                for c in num_cols_df:
+                    if c in df_disp_df.columns:
+                        df_disp_df[c] = pd.to_numeric(df_disp_df[c]).fillna(0).astype(int).astype(str).replace('0','')
+
+                # G. APPLY SPECIAL STYLING
+                final_styler_df = get_styled_dataframe(df_disp_df)
+
+                # HEIGHT DISET 200px Biar Scrollable
+                event_mri_d = st.dataframe(final_styler_df, height=200, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
                 
                 if len(event_mri_d.selection.rows) > 0:
                     idx = event_mri_d.selection.rows[0]; sel_tid = str(piv_df.iloc[idx]['TID']); sel_loc = piv_df.iloc[idx]['LOKASI']
@@ -1099,7 +1246,7 @@ elif st.session_state['app_mode'] == 'main':
                 # KATEGORI LAIN: COUNT BARIS
                 return len(dframe)
 
-            val_total_atm = 611 
+            val_total_atm = 543 
             val_prev = get_val_std(df_prev)
             weeks = ['W1', 'W2', 'W3', 'W4']
             w_vals = {}; curr_total = 0
@@ -1115,7 +1262,7 @@ elif st.session_state['app_mode'] == 'main':
                 'W1': [w_vals['W1']], 'W2': [w_vals['W2']], 'W3': [w_vals['W3']], 'W4': [w_vals['W4']], 
                 f'Σ {curr_mon_short}': [curr_total], 'AVG': [f"{avg_val:.1f}"], 'PROB %': [f"{prob_val:.2f}%"] 
             }
-            st.dataframe(apply_corporate_style(clean_zeros(pd.DataFrame(overview_data))), use_container_width=True, hide_index=True)
+            st.dataframe(get_styled_dataframe(clean_zeros(pd.DataFrame(overview_data))), use_container_width=True, hide_index=True)
             
             # 2. RISK TIERS ANALYSIS
             st.markdown(f'<div class="section-header" style="margin-top: 15px;">⚠️ Risk Tiers Analysis</div>', unsafe_allow_html=True)
@@ -1146,8 +1293,8 @@ elif st.session_state['app_mode'] == 'main':
                 except: pass
                 return df1
             
-            base_obj = apply_corporate_style(clean_zeros(df_tiers))
-            try: st.dataframe(base_obj.style.apply(highlight_total_row, axis=None), use_container_width=True, hide_index=True)
+            base_obj = get_styled_dataframe(clean_zeros(df_tiers))
+            try: st.dataframe(base_obj.apply(highlight_total_row, axis=None), use_container_width=True, hide_index=True)
             except: st.dataframe(base_obj, use_container_width=True, hide_index=True)
 
             # 3. FOLLOW UP / TOP LOCATION
@@ -1172,7 +1319,7 @@ elif st.session_state['app_mode'] == 'main':
             
             # --- ANALISA & CATATAN ---
             st.markdown(f'<div class="section-header" style="margin-top: 15px; margin-bottom: 5px !important;">📝 Analisa & Catatan</div>', unsafe_allow_html=True)
-            input_height = 150 if sel_cat == 'Elastic' else (100 if sel_cat == 'Complain' else 80)
+            input_height = 90 if sel_cat == 'Elastic' else (100 if sel_cat == 'Complain' else 80)
             current_analysis_text = ""
             if not df_curr.empty:
                 if 'ANALISA' in df_curr.columns: current_analysis_text = df_curr['ANALISA'].iloc[0]
@@ -1220,7 +1367,10 @@ elif st.session_state['app_mode'] == 'main':
                     "W4": st.column_config.TextColumn("W4", width="small"), 
                     col_total: st.column_config.TextColumn(col_total, width="small")
                 }
-                event = st.dataframe(apply_corporate_style(clean_zeros(top_all_df[display_cols])), height=220, column_config=col_config, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                # USE UNIVERSAL STYLER HERE TOO
+                final_styler_tids = get_styled_dataframe(clean_zeros(top_all_df[display_cols]))
+
+                event = st.dataframe(final_styler_tids, height=220, column_config=col_config, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
                 
                 if len(event.selection.rows) > 0:
                     selected_idx = event.selection.rows[0]; selected_tid = str(top_all_df.iloc[selected_idx]['TID']); selected_loc = top_all_df.iloc[selected_idx]['LOKASI']
@@ -1289,4 +1439,4 @@ elif st.session_state['app_mode'] == 'main':
                     if c in top_cab_str.columns: top_cab_str[c] = top_cab_str[c].astype(int).astype(str)
                 cols_to_show = ['CABANG'] + [c for c in final_cols_cab if c in top_cab_str.columns]
                 
-                st.dataframe(apply_corporate_style(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
+                st.dataframe(get_styled_dataframe(clean_zeros(top_cab_str[cols_to_show])), height=200, use_container_width=True, hide_index=True)
