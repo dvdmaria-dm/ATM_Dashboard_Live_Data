@@ -229,20 +229,15 @@ if 'app_mode' not in st.session_state:
 
 # --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE - ULTRA SLIM & ELEGANT) ---
 if st.session_state['app_mode'] == 'cover':
-    # CSS KHUSUS HALAMAN COVER DENGAN ANIMASI NAVIGASI (REVISI GALAK - FORCED)
+    # CSS KHUSUS HALAMAN COVER DENGAN ANIMASI NAVIGASI
     st.markdown("""
         <style>
-            /* 1. Ubah Background jadi Biru Gelap Command Center */
             [data-testid="stAppViewContainer"] {
                 background-color: #00172E; 
                 background-image: linear-gradient(180deg, #00172E 0%, #000F1F 100%);
                 color: #FFFFFF;
             }
-            
-            /* 2. Sembunyikan Header Bawaan */
             [data-testid="stHeader"] { visibility: hidden; }
-            
-            /* 3. Styling Judul Utama (Kuning Underline) */
             .cover-title {
                 font-family: 'Helvetica', sans-serif;
                 font-size: 38px;
@@ -255,8 +250,6 @@ if st.session_state['app_mode'] == 'cover':
                 margin-bottom: 20px;
                 letter-spacing: 1px;
             }
-            
-            /* 4. Sub-Title & Info */
             .cover-subtitle {
                 font-size: 18px;
                 font-weight: 400;
@@ -270,8 +263,6 @@ if st.session_state['app_mode'] == 'cover':
                 margin-bottom: 8px;
                 font-family: 'Inter', sans-serif;
             }
-            
-            /* 5. STYLING TOMBOL NAVIGASI - FORCE OVERRIDE !important */
             div.stButton > button {
                 border-radius: 6px !important;
                 border: 1px solid #0EA5E9 !important; /* Biru Muda */
@@ -288,8 +279,6 @@ if st.session_state['app_mode'] == 'cover':
                 box-shadow: none !important;
                 width: 100% !important;
             }
-            
-            /* HOVER EFFECT - TEXT SLIDE & GLOW - FORCE OVERRIDE !important */
             div.stButton > button:hover {
                 border-color: #FFC107 !important;
                 color: #FFC107 !important;
@@ -298,14 +287,10 @@ if st.session_state['app_mode'] == 'cover':
                 box-shadow: 0 0 15px rgba(255, 193, 7, 0.4) !important; /* Glow elegant */
                 transform: translateX(5px) !important; /* Tombol fisik geser kanan */
             }
-
-            /* ACTIVE CLICK */
             div.stButton > button:active {
                 transform: translateX(2px) !important;
                 background-color: rgba(255, 193, 7, 0.3) !important;
             }
-            
-            /* 6. HACK: Tombol Pertama (MRI) jadi Orange Solid */
             [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button {
                 background: linear-gradient(135deg, #D97706 0%, #B45309 100%) !important;
                 color: white !important;
@@ -313,8 +298,6 @@ if st.session_state['app_mode'] == 'cover':
                 font-weight: 800 !important;
                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
             }
-            
-            /* HOVER KHUSUS MRI */
             [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button:hover {
                 background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
                 color: white !important;
@@ -326,8 +309,6 @@ if st.session_state['app_mode'] == 'cover':
     """, unsafe_allow_html=True)
 
     # --- LAYOUT DENGAN SPACER YANG LEBIH LUAS ---
-    # Rasio Baru: Tombol (1.8) jauh lebih kecil dari sebelumnya (2.5)
-    # Spacer kiri-kanan diperlebar (1.2) supaya konten makin di tengah
     c_space_l, c1, c_gap, c2, c_space_r = st.columns([1.2, 4.0, 0.4, 1.8, 1.2])
     
     with c1:
@@ -735,7 +716,6 @@ elif st.session_state['app_mode'] == 'main':
     nav_col, filter_col = st.columns([2.5, 1.8], gap="medium")
 
     with nav_col:
-        # --- CUSTOM CSS INJECTION KHUSUS NAVIGASI RADIO (HASIAN FIX) ---
         st.markdown("""
         <style>
         /* CONTAINER RADIO */
@@ -745,7 +725,6 @@ elif st.session_state['app_mode'] == 'main':
             width: 100% !important; 
             gap: 10px !important;
         } 
-        
         /* LABEL TOMBOL (NON-ACTIVE) */
         div[role="radiogroup"] label { 
             background: #FFFFFF !important;
@@ -761,24 +740,22 @@ elif st.session_state['app_mode'] == 'main':
             display: flex !important;
             align-items: center !important;
         }
-        
-        /* HOVER EFFECT - SLIDE & GLOW */
+        /* HOVER EFFECT */
         div[role="radiogroup"] label:hover {
-            border-color: #F59E0B !important; /* Gold */
+            border-color: #F59E0B !important;
             color: #D97706 !important;
-            background-color: #FFFBEB !important; /* Light Yellow */
-            padding-left: 20px !important; /* Slide Text Effect */
+            background-color: #FFFBEB !important;
+            padding-left: 20px !important;
             box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25) !important;
             transform: translateX(4px) !important;
         }
-
-        /* ACTIVE STATE (SELECTED) */
+        /* ACTIVE STATE */
         div[role="radiogroup"] label[data-checked="true"] { 
             background: linear-gradient(90deg, #00529C 0%, #00386B 100%) !important; 
             color: white !important; 
             border: none !important; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
-            padding-left: 14px !important; /* Reset slide */
+            padding-left: 14px !important;
             transform: scale(1.05) !important;
         }
         </style>
@@ -830,7 +807,9 @@ elif st.session_state['app_mode'] == 'main':
         if not sort_week: sort_week = st.session_state.p_week
         prev_mon = get_prev_month_full_en(sel_mon)
         curr_mon_short = sel_mon[:3] if sel_mon else ""
-        prev_mon_short = prev_mon[:3] if prev_mon else "Prev"
+        
+        # --- FIX: LOGIKA SUFFIX PREV AGAR KONSISTEN DI SEMUA TABEL ---
+        prev_mon_short = f"{prev_mon[:3]} (Prev)" if prev_mon else "Prev"
     else:
         st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -1177,10 +1156,18 @@ elif st.session_state['app_mode'] == 'main':
                     # 2. Extract & Filter Dates based on Dropdown
                     prob_dates_str = "-"
                     if not tid_problems.empty and col_prob:
-                        # Get Last Problem Time (Existing Logic)
+                        # --- FIX: LAST PROBLEM LOGIC WITH DATE ---
                         last_date = tid_problems[col_prob].max()
-                        if pd.notnull(last_date): days = (datetime.now() - last_date).days; time_str = "Hari ini" if days == 0 else ("Kemarin" if days == 1 else f"{days} hari lalu")
-
+                        if pd.notnull(last_date): 
+                            diff = datetime.now() - last_date
+                            days = diff.days
+                            date_fmt = last_date.strftime('%d-%b-%Y')
+                            
+                            if days == 0: rel_str = "Hari ini"
+                            elif days == 1: rel_str = "Kemarin"
+                            else: rel_str = f"{days} hari lalu"
+                            time_str = f"{date_fmt} ({rel_str})"
+                        
                         # Get List of Dates based on Week Filter
                         dates_all = tid_problems[col_prob].dropna()
                         
@@ -1319,11 +1306,18 @@ elif st.session_state['app_mode'] == 'main':
                     if not tid_problems.empty:
                         col_time = 'WAKTU_INSERT' if 'WAKTU_INSERT' in tid_problems.columns else 'TANGGAL'
                         if col_time in tid_problems.columns:
+                            # --- FIX: LAST PROBLEM LOGIC WITH DATE ---
                             last_time = tid_problems[col_time].max()
                             if pd.notnull(last_time):
-                                diff = datetime.now() - last_time; days = diff.days
-                                if days > 0: time_str = f"{days} hari lalu"
-                                else: hrs = int(diff.seconds // 3600); time_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
+                                diff = datetime.now() - last_time
+                                days = diff.days
+                                date_fmt = last_time.strftime('%d-%b-%Y')
+                                
+                                if days > 0: rel_str = f"{days} hari lalu"
+                                else:
+                                    hrs = int(diff.seconds // 3600)
+                                    rel_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
+                                time_str = f"{date_fmt} ({rel_str})"
                     
                         # Filter Week Logic
                         dates_all = tid_problems[col_time].dropna()
@@ -1383,7 +1377,7 @@ elif st.session_state['app_mode'] == 'main':
             prob_val = (curr_total / val_total_atm * 100) if val_total_atm > 0 else 0
 
             overview_data = { 
-                'TOTAL ATM': [str(val_total_atm)], f'{prev_mon_short} (Prev)': [val_prev], 
+                'TOTAL ATM': [str(val_total_atm)], f'{prev_mon_short}': [val_prev], 
                 'W1': [w_vals['W1']], 'W2': [w_vals['W2']], 'W3': [w_vals['W3']], 'W4': [w_vals['W4']], 
                 f'Σ {curr_mon_short}': [curr_total], 'AVG': [f"{avg_val:.1f}"], 'PROB %': [f"{prob_val:.2f}%"] 
             }
@@ -1499,35 +1493,41 @@ elif st.session_state['app_mode'] == 'main':
                 
                 if len(event.selection.rows) > 0:
                     selected_idx = event.selection.rows[0]; selected_tid = str(top_all_df.iloc[selected_idx]['TID']); selected_loc = top_all_df.iloc[selected_idx]['LOKASI']
-                    time_str = "N/A"; tid_problems = df_curr[df_curr['TID'].astype(str) == selected_tid]
+                    time_str = "N/A"
+                    tid_problems = df_curr[df_curr['TID'].astype(str) == selected_tid]
                     if not tid_problems.empty:
-                        now = datetime.now()
-                        if sel_cat in ['Elastic', 'Complain'] and 'TANGGAL' in tid_problems.columns:
-                            last_prob_date = tid_problems['TANGGAL'].max()
-                            if pd.notnull(last_prob_date): days = (now - last_prob_date).days; time_str = "Hari ini" if days == 0 else ("Kemarin" if days == 1 else f"{days} hari lalu")
-                        elif sel_cat in ['DF Repeat', 'OUT Flm'] and 'WAKTU_INSERT' in tid_problems.columns:
-                            last_prob_time = tid_problems['WAKTU_INSERT'].max()
-                            if pd.notnull(last_prob_time): diff = now - last_prob_time; days = diff.days; hrs = int(diff.seconds // 3600); time_str = f"{days} hari lalu" if days > 0 else (f"{hrs} jam lalu" if hrs > 0 else "Baru saja")
-                    
-                    # --- NEW LOGIC: DATE COUNT FREQUENCY ---
-                    col_prob = 'TANGGAL' if 'TANGGAL' in tid_problems.columns else ('WAKTU_INSERT' if 'WAKTU_INSERT' in tid_problems.columns else None)
-                    prob_dates_str = "-"
-                    if not tid_problems.empty and col_prob:
-                         # Filter Week Logic
-                        dates_all = tid_problems[col_prob].dropna()
-                        if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
-                        elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
-                        elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
-                        elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
-                        else: dates_filtered = dates_all
+                        # --- NEW LOGIC: DATE COUNT FREQUENCY ---
+                        col_prob = 'TANGGAL' if 'TANGGAL' in tid_problems.columns else ('WAKTU_INSERT' if 'WAKTU_INSERT' in tid_problems.columns else None)
+                        prob_dates_str = "-"
+                        if not tid_problems.empty and col_prob:
+                            # --- FIX: LAST PROBLEM LOGIC WITH DATE ---
+                            last_time = tid_problems[col_prob].max()
+                            if pd.notnull(last_time):
+                                diff = datetime.now() - last_time
+                                days = diff.days
+                                date_fmt = last_time.strftime('%d-%b-%Y')
+                                
+                                if days > 0: rel_str = f"{days} hari lalu"
+                                else:
+                                    hrs = int(diff.seconds // 3600)
+                                    rel_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
+                                time_str = f"{date_fmt} ({rel_str})"
 
-                        if not dates_filtered.empty:
-                            # COUNT FREQUENCY LOGIC
-                            date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
-                            formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
-                            prob_dates_str = ", ".join(formatted_dates)
-                        else:
-                            prob_dates_str = f"Tidak ada problem di {sort_week}"
+                             # Filter Week Logic
+                            dates_all = tid_problems[col_prob].dropna()
+                            if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
+                            elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
+                            elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
+                            elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
+                            else: dates_filtered = dates_all
+
+                            if not dates_filtered.empty:
+                                # COUNT FREQUENCY LOGIC
+                                date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
+                                formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
+                                prob_dates_str = ", ".join(formatted_dates)
+                            else:
+                                prob_dates_str = f"Tidak ada problem di {sort_week}"
 
                     st.info(f"📋 **History TID: {selected_tid}** ({selected_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
 
@@ -1556,7 +1556,7 @@ elif st.session_state['app_mode'] == 'main':
                     else: branch_prev = df_prev['CABANG'].value_counts().reset_index()
                     branch_prev.columns = ['CABANG', prev_mon_short] 
                 else: branch_prev = pd.DataFrame(columns=['CABANG', prev_mon_short])
-                
+                    
                 merged_cab = pd.merge(p_cab, branch_prev, on='CABANG', how='left').fillna(0)
                 col_total_cab = f'Σ {curr_mon_short}'; merged_cab[col_total_cab] = merged_cab[weeks].sum(axis=1)
                 
