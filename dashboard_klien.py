@@ -229,7 +229,7 @@ if 'app_mode' not in st.session_state:
 
 # --- A. TAMPILAN HALAMAN PEMBUKA (LANDING PAGE - ULTRA SLIM & ELEGANT) ---
 if st.session_state['app_mode'] == 'cover':
-    # CSS KHUSUS HALAMAN COVER
+    # CSS KHUSUS HALAMAN COVER DENGAN ANIMASI NAVIGASI (REVISI GALAK - FORCED)
     st.markdown("""
         <style>
             /* 1. Ubah Background jadi Biru Gelap Command Center */
@@ -271,38 +271,56 @@ if st.session_state['app_mode'] == 'cover':
                 font-family: 'Inter', sans-serif;
             }
             
-            /* 5. Styling Tombol Navigasi (Kotak Outline - Lebih Slim) */
+            /* 5. STYLING TOMBOL NAVIGASI - FORCE OVERRIDE !important */
             div.stButton > button {
-                border-radius: 4px;
-                border: 1px solid #0EA5E9; /* Biru Muda */
-                background-color: rgba(14, 165, 233, 0.05); /* Transparan */
-                color: #0EA5E9;
-                text-align: left;
-                padding-left: 15px;
-                font-weight: 600;
-                height: 45px; /* Sedikit lebih pendek lagi */
-                text-transform: uppercase;
-                transition: all 0.3s ease;
-                font-size: 12px; /* Font diperhalus */
+                border-radius: 6px !important;
+                border: 1px solid #0EA5E9 !important; /* Biru Muda */
+                background: rgba(14, 165, 233, 0.05) !important;
+                color: #0EA5E9 !important;
+                text-align: left !important;
+                padding-left: 20px !important;
+                font-weight: 600 !important;
+                height: 48px !important;
+                text-transform: uppercase !important;
+                font-size: 12px !important;
+                letter-spacing: 1px !important;
+                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+                box-shadow: none !important;
+                width: 100% !important;
             }
+            
+            /* HOVER EFFECT - TEXT SLIDE & GLOW - FORCE OVERRIDE !important */
             div.stButton > button:hover {
-                border-color: #FFC107;
-                color: #FFC107;
-                background-color: rgba(255, 193, 7, 0.1);
+                border-color: #FFC107 !important;
+                color: #FFC107 !important;
+                background-color: rgba(255, 193, 7, 0.15) !important; /* Background Kuning Transparan */
+                padding-left: 35px !important; /* Efek teks bergeser jauh ke kanan */
+                box-shadow: 0 0 15px rgba(255, 193, 7, 0.4) !important; /* Glow elegant */
+                transform: translateX(5px) !important; /* Tombol fisik geser kanan */
+            }
+
+            /* ACTIVE CLICK */
+            div.stButton > button:active {
+                transform: translateX(2px) !important;
+                background-color: rgba(255, 193, 7, 0.3) !important;
             }
             
             /* 6. HACK: Tombol Pertama (MRI) jadi Orange Solid */
             [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button {
-                background-color: #D97706; /* Orange */
-                color: white;
-                border: none;
-                font-weight: 800;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+                background: linear-gradient(135deg, #D97706 0%, #B45309 100%) !important;
+                color: white !important;
+                border: none !important;
+                font-weight: 800 !important;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
             }
+            
+            /* HOVER KHUSUS MRI */
             [data-testid="column"]:nth-of-type(4) .stButton:nth-of-type(1) button:hover {
-                background-color: #B45309;
-                color: white;
-                transform: translateY(-1px);
+                background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+                color: white !important;
+                transform: scale(1.03) !important; /* Membesar sedikit */
+                box-shadow: 0 6px 15px rgba(245, 158, 11, 0.6) !important;
+                padding-left: 20px !important; /* Reset slide */
             }
         </style>
     """, unsafe_allow_html=True)
@@ -406,7 +424,7 @@ elif st.session_state['app_mode'] == 'main':
                 return 0
 
         cat_label = h_cat.upper()
-        total_armada = 611 
+        total_armada = 543 
         
         if h_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
@@ -702,8 +720,8 @@ elif st.session_state['app_mode'] == 'main':
     div[data-testid="column"]:nth-of-type(2) {
         margin-top: -50px !important;
     }
-    div[data-baseweb="select"],
-    div[data-testid="stCheckbox"],
+    div[data-baseweb="select"], 
+    div[data-testid="stCheckbox"], 
     div[data-testid="stToggle"] {
         margin-top: -50px !important;
     }
@@ -714,7 +732,55 @@ elif st.session_state['app_mode'] == 'main':
     nav_col, filter_col = st.columns([2.5, 1.8], gap="medium")
 
     with nav_col:
-        st.markdown("""<style>div[role="radiogroup"] { justify-content: flex-start !important; flex-wrap: nowrap !important; width: 100% !important; } div[role="radiogroup"] label { white-space: nowrap !important; }</style>""", unsafe_allow_html=True)
+        # --- CUSTOM CSS INJECTION KHUSUS NAVIGASI RADIO (HASIAN FIX) ---
+        st.markdown("""
+        <style>
+        /* CONTAINER RADIO */
+        div[role="radiogroup"] { 
+            justify-content: flex-start !important; 
+            flex-wrap: nowrap !important; 
+            width: 100% !important; 
+            gap: 10px !important;
+        } 
+        
+        /* LABEL TOMBOL (NON-ACTIVE) */
+        div[role="radiogroup"] label { 
+            background: #FFFFFF !important;
+            border: 1px solid #CBD5E1 !important; 
+            border-radius: 6px !important; 
+            padding: 6px 14px !important; 
+            font-size: 11px !important; 
+            font-weight: 600 !important; 
+            color: #475569 !important; 
+            white-space: nowrap !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        
+        /* HOVER EFFECT - SLIDE & GLOW */
+        div[role="radiogroup"] label:hover {
+            border-color: #F59E0B !important; /* Gold */
+            color: #D97706 !important;
+            background-color: #FFFBEB !important; /* Light Yellow */
+            padding-left: 20px !important; /* Slide Text Effect */
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25) !important;
+            transform: translateX(4px) !important;
+        }
+
+        /* ACTIVE STATE (SELECTED) */
+        div[role="radiogroup"] label[data-checked="true"] { 
+            background: linear-gradient(90deg, #00529C 0%, #00386B 100%) !important; 
+            color: white !important; 
+            border: none !important; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+            padding-left: 14px !important; /* Reset slide */
+            transform: scale(1.05) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
         menu_items = ['MRI Project', 'Elastic', 'Complain', 'DF Repeat', 'OUT Flm', 'SparePart & Kaset']
         sel_cat = st.radio("Navigasi:", menu_items, index=0, horizontal=True, label_visibility="collapsed", key="nav_cat")
 
