@@ -333,14 +333,17 @@ if st.session_state['app_mode'] == 'cover':
     with c1:
         st.markdown('<div style="height: 60px;"></div>', unsafe_allow_html=True) # Spacer Atas
         
-        # --- [NEW] LOGO DISPLAY LOGIC ---
-        logo_file = "Logo Command Center.png"
-        if os.path.exists(logo_file):
-            st.image(logo_file, width=400)
-            st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True) # Spacer kecil setelah logo
+        # --- [FIX LOGO] JURUS PATH ANTI NYASAR ---
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_filename = "Logo Command Center.png"
+        logo_path = os.path.join(current_dir, logo_filename)
+
+        if os.path.exists(logo_path):
+            st.image(logo_path, width=400)
+            st.markdown('<div style="height: 15px;"></div>', unsafe_allow_html=True) 
         else:
-            # Fallback jika gambar belum diupload user
-            st.warning(f"⚠️ Logo not found: {logo_file}")
+            st.warning(f"⚠️ Gambar tidak ditemukan di server: {logo_filename}")
+            st.info("Tips: Pastikan file gambar sudah di-upload ke GitHub dan nama filenya sama persis (Case Sensitive).")
 
         # JUDUL WEEKLY
         st.markdown('<div class="cover-title">WEEKLY PERFORMANCE REVIEW</div>', unsafe_allow_html=True)
@@ -424,7 +427,7 @@ elif st.session_state['app_mode'] == 'main':
                 return 0
 
         cat_label = h_cat.upper()
-        total_armada = 543 
+        total_armada = 611 
         
         if h_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
@@ -1164,11 +1167,39 @@ elif st.session_state['app_mode'] == 'main':
                 if len(event_mri_c.selection.rows) > 0:
                     idx = event_mri_c.selection.rows[0]; sel_tid = str(piv.iloc[idx]['TID']); sel_loc = piv.iloc[idx]['LOKASI']
                     time_str = "N/A"
+                    
+                    # --- TID PROBLEM FILTER LOGIC (STRICT WEEK & COUNT) ---
                     tid_problems = df_mri_comp[df_mri_comp['TID'].astype(str) == sel_tid]
-                    if not tid_problems.empty and 'TANGGAL' in tid_problems.columns:
-                        last_date = tid_problems['TANGGAL'].max()
+                    
+                    # 1. Determine Date Column
+                    col_prob = 'TANGGAL' if 'TANGGAL' in tid_problems.columns else ('WAKTU_INSERT' if 'WAKTU_INSERT' in tid_problems.columns else None)
+                    
+                    # 2. Extract & Filter Dates based on Dropdown
+                    prob_dates_str = "-"
+                    if not tid_problems.empty and col_prob:
+                        # Get Last Problem Time (Existing Logic)
+                        last_date = tid_problems[col_prob].max()
                         if pd.notnull(last_date): days = (datetime.now() - last_date).days; time_str = "Hari ini" if days == 0 else ("Kemarin" if days == 1 else f"{days} hari lalu")
-                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc}) • **Last Problem:** {time_str}")
+
+                        # Get List of Dates based on Week Filter
+                        dates_all = tid_problems[col_prob].dropna()
+                        
+                        if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
+                        elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
+                        elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
+                        elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
+                        else: dates_filtered = dates_all # All Week
+                        
+                        if not dates_filtered.empty:
+                            # COUNT FREQUENCY LOGIC
+                            date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
+                            formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
+                            prob_dates_str = ", ".join(formatted_dates)
+                        else:
+                            prob_dates_str = f"Tidak ada problem di {sort_week}"
+
+                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
+                    
                     if not df_slm.empty:
                         slm_det = df_slm[(df_slm['TID'] == sel_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
                         if not slm_det.empty:
@@ -1293,7 +1324,24 @@ elif st.session_state['app_mode'] == 'main':
                                 diff = datetime.now() - last_time; days = diff.days
                                 if days > 0: time_str = f"{days} hari lalu"
                                 else: hrs = int(diff.seconds // 3600); time_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
-                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc}) • **Last Problem:** {time_str}")
+                    
+                        # Filter Week Logic
+                        dates_all = tid_problems[col_time].dropna()
+                        if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
+                        elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
+                        elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
+                        elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
+                        else: dates_filtered = dates_all
+
+                        if not dates_filtered.empty:
+                            # COUNT FREQUENCY LOGIC
+                            date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
+                            formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
+                            prob_dates_str = ", ".join(formatted_dates)
+                        else:
+                            prob_dates_str = f"Tidak ada problem di {sort_week}"
+                            
+                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
                     if not df_slm.empty:
                         slm_det = df_slm[(df_slm['TID'] == sel_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
                         if not slm_det.empty:
@@ -1460,7 +1508,29 @@ elif st.session_state['app_mode'] == 'main':
                         elif sel_cat in ['DF Repeat', 'OUT Flm'] and 'WAKTU_INSERT' in tid_problems.columns:
                             last_prob_time = tid_problems['WAKTU_INSERT'].max()
                             if pd.notnull(last_prob_time): diff = now - last_prob_time; days = diff.days; hrs = int(diff.seconds // 3600); time_str = f"{days} hari lalu" if days > 0 else (f"{hrs} jam lalu" if hrs > 0 else "Baru saja")
-                    st.info(f"📋 **History TID: {selected_tid}** ({selected_loc}) • **Last Problem:** {time_str}")
+                    
+                    # --- NEW LOGIC: DATE COUNT FREQUENCY ---
+                    col_prob = 'TANGGAL' if 'TANGGAL' in tid_problems.columns else ('WAKTU_INSERT' if 'WAKTU_INSERT' in tid_problems.columns else None)
+                    prob_dates_str = "-"
+                    if not tid_problems.empty and col_prob:
+                         # Filter Week Logic
+                        dates_all = tid_problems[col_prob].dropna()
+                        if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
+                        elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
+                        elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
+                        elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
+                        else: dates_filtered = dates_all
+
+                        if not dates_filtered.empty:
+                            # COUNT FREQUENCY LOGIC
+                            date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
+                            formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
+                            prob_dates_str = ", ".join(formatted_dates)
+                        else:
+                            prob_dates_str = f"Tidak ada problem di {sort_week}"
+
+                    st.info(f"📋 **History TID: {selected_tid}** ({selected_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
+
                     if not df_slm.empty and 'BULAN_EN' in df_slm.columns:
                         slm_detail = df_slm[(df_slm['TID'] == selected_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
                         if not slm_detail.empty:
