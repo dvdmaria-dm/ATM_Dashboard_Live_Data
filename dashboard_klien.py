@@ -850,16 +850,35 @@ elif st.session_state['app_mode'] == 'main':
 
     # --- MICRO METRICS SECTION ---
     if sel_cat != 'SparePart & Kaset':
+        # --- FIX: LOGIKA KPI MENGIKUTI DROPDOWN MINGGU ---
+        week_map = {'W1': 1, 'W2': 2, 'W3': 3, 'W4': 4}
+        kpi_limit = week_map.get(sort_week, 4) # Default 4 jika All Week
+
         if sel_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
+            # CURRENT
             df_raw_mri = df[(df['BULAN_EN'] == sel_mon) & (df[col_status] == 'TID MRI')].copy() if col_status in df.columns else pd.DataFrame()
             df_met = df_raw_mri[df_raw_mri['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
-            
+            # PREVIOUS
             df_prev_raw_mri = df[(df['BULAN_EN'] == prev_mon) & (df[col_status] == 'TID MRI')].copy() if prev_mon and col_status in df.columns else pd.DataFrame()
             df_prev_met = df_prev_raw_mri[df_prev_raw_mri['KATEGORI'].isin(['Complain', 'DF Repeat'])].copy()
         else:
+            # CURRENT
             df_met = df[(df['BULAN_EN'] == sel_mon) & (df['KATEGORI'] == sel_cat)].copy()
+            # PREVIOUS
             df_prev_met = df[(df['BULAN_EN'] == prev_mon) & (df['KATEGORI'] == sel_cat)].copy() if prev_mon else pd.DataFrame()
+
+        # --- TERAPKAN LIMIT FILTER KE KEDUA DATASET (CURRENT & PREV) ---
+        if sort_week != 'All Week':
+            if not df_met.empty and 'WEEK' in df_met.columns:
+                df_met['TEMP_W'] = df_met['WEEK'].map(week_map).fillna(0)
+                df_met = df_met[df_met['TEMP_W'] <= kpi_limit].copy()
+                df_met.drop(columns=['TEMP_W'], inplace=True)
+            
+            if not df_prev_met.empty and 'WEEK' in df_prev_met.columns:
+                df_prev_met['TEMP_W'] = df_prev_met['WEEK'].map(week_map).fillna(0)
+                df_prev_met = df_prev_met[df_prev_met['TEMP_W'] <= kpi_limit].copy()
+                df_prev_met.drop(columns=['TEMP_W'], inplace=True)
 
         # FIX METRICS: GUNAKAN SUM UNTUK COMPLAIN
         if sel_cat == 'Complain':
@@ -869,7 +888,9 @@ elif st.session_state['app_mode'] == 'main':
             total_t = len(df_met)
             prev_t = len(df_prev_met)
 
-        avg_t = total_t / 4
+        # FIX: AVG DIBAGI SESUAI JUMLAH MINGGU YG DIPILIH
+        avg_t = total_t / kpi_limit
+        
         diff_t = total_t - prev_t
         t_icon = "▲" if diff_t > 0 else ("▼" if diff_t < 0 else "•")
         t_color = "#DC2626" if diff_t > 0 else ("#16A34A" if diff_t < 0 else "#64748B")
@@ -973,10 +994,19 @@ elif st.session_state['app_mode'] == 'main':
                 return pd.DataFrame(subset_data.values[1:], columns=final_h)
             except: return pd.DataFrame()
 
-        subset_kaset = df_sp_raw.iloc[11:22, 0:12]
-        manual_headers = ["CABANG", "JML TID", "NOV GOOD CURRENT", "NOV GOOD REJECT", "W1 DEC GOOD CURRENT", "W1 DEC GOOD REJECT", "W2 DEC GOOD REJECT", "W2 DEC GOOD CURRENT", "W3 DEC GOOD CURRENT", "W3 DEC GOOD REJECT", "W4 DEC GOOD CURRENT", "W4 DEC GOOD REJECT"]
+        # --- MODIFIED SECTION START: STOCK KASET HEADER ---
+        # Mengambil data dari A12:J21 (Row 11:22, Col 0:10 untuk 10 header)
+        subset_kaset = df_sp_raw.iloc[11:22, 0:10]
+        manual_headers = [
+            "CABANG", "JML TID", 
+            "JAN W1 GOOD CURRENT", "JAN W1 GOOD REJECT", 
+            "JAN W2 GOOD CURRENT", "JAN W2 GOOD REJECT", 
+            "JAN W3 GOOD CURRENT", "JAN W3 GOOD REJECT", 
+            "JAN W4 GOOD CURRENT", "JAN W4 GOOD REJECT"
+        ]
         df_kaset_final = pd.DataFrame(subset_kaset.values[1:], columns=manual_headers)
         df_kaset_final = df_kaset_final[(df_kaset_final['CABANG'].str.strip() != "") & (df_kaset_final['CABANG'].notna()) & (df_kaset_final['CABANG'].str.upper() != "CABANG")]
+        # --- MODIFIED SECTION END ---
 
         tab1, tab2, tab3 = st.tabs(["🛠️ Stock Sparepart", "📼 Stock Kaset", "⚠️ Monitoring & PM"])
         
@@ -1264,7 +1294,7 @@ elif st.session_state['app_mode'] == 'main':
                     piv_df[prev_mon_short] = 0
 
                 # Ensure Columns
-                for w in ['W1','W2','W3','W4']:
+                for w in ['W1','W2','W3','W4']: 
                     if w not in piv_df.columns: piv_df[w] = 0
 
                 # C. Calculate Total Current (Σ Jan)
@@ -1308,41 +1338,43 @@ elif st.session_state['app_mode'] == 'main':
                         if col_time in tid_problems.columns:
                             # --- FIX: LAST PROBLEM LOGIC WITH DATE ---
                             last_time = tid_problems[col_time].max()
-                            if pd.notnull(last_time):
+                            if pd.notnull(last_time): 
                                 diff = datetime.now() - last_time
                                 days = diff.days
                                 date_fmt = last_time.strftime('%d-%b-%Y')
                                 
                                 if days > 0: rel_str = f"{days} hari lalu"
-                                else:
+                                else: 
                                     hrs = int(diff.seconds // 3600)
                                     rel_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
                                 time_str = f"{date_fmt} ({rel_str})"
                     
-                        # Filter Week Logic
-                        dates_all = tid_problems[col_time].dropna()
-                        if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
-                        elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
-                        elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
-                        elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
-                        else: dates_filtered = dates_all
+                            # Filter Week Logic
+                            dates_all = tid_problems[col_time].dropna()
+                            if sort_week == 'W1': dates_filtered = dates_all[dates_all.dt.day <= 7]
+                            elif sort_week == 'W2': dates_filtered = dates_all[(dates_all.dt.day > 7) & (dates_all.dt.day <= 15)]
+                            elif sort_week == 'W3': dates_filtered = dates_all[(dates_all.dt.day > 15) & (dates_all.dt.day <= 23)]
+                            elif sort_week == 'W4': dates_filtered = dates_all[dates_all.dt.day > 23]
+                            else: dates_filtered = dates_all
 
-                        if not dates_filtered.empty:
-                            # COUNT FREQUENCY LOGIC
-                            date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
-                            formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
-                            prob_dates_str = ", ".join(formatted_dates)
-                        else:
-                            prob_dates_str = f"Tidak ada problem di {sort_week}"
+                            if not dates_filtered.empty:
+                                # COUNT FREQUENCY LOGIC
+                                date_counts = dates_filtered.dt.strftime('%d-%b').value_counts().sort_index()
+                                formatted_dates = [f"{date} ({count}x)" for date, count in date_counts.items()]
+                                prob_dates_str = ", ".join(formatted_dates)
+                            else:
+                                prob_dates_str = f"Tidak ada problem di {sort_week}"
                             
-                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
-                    if not df_slm.empty:
-                        slm_det = df_slm[(df_slm['TID'] == sel_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
-                        if not slm_det.empty:
-                            slm_det = slm_det.sort_values('TGL_VISIT', ascending=False).head(2); slm_det['TGL_VISIT'] = slm_det['TGL_VISIT'].dt.strftime('%d-%b-%Y')
-                            col_act = next((c for c in slm_det.columns if 'ACTION' in c.upper() or 'KETERANGAN' in c.upper()), None)
-                            if col_act: st.dataframe(slm_det[['TGL_VISIT', col_act]], hide_index=True)
-                        else: st.caption(f"No Visit Data for {sel_tid}")
+                    st.info(f"📋 **History TID: {selected_tid}** ({selected_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
+
+                    if not df_slm.empty and 'BULAN_EN' in df_slm.columns:
+                        slm_detail = df_slm[(df_slm['TID'] == selected_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
+                        if not slm_detail.empty:
+                            slm_detail = slm_detail.sort_values('TGL_VISIT', ascending=False).head(2); slm_detail['TGL_VISIT'] = slm_detail['TGL_VISIT'].dt.strftime('%d-%b-%Y')
+                            col_action = next((c for c in slm_detail.columns if 'ACTION' in c.upper() or 'KETERANGAN' in c.upper()), None)
+                            if col_action: st.dataframe(slm_detail[['TGL_VISIT', col_action]], use_container_width=True, hide_index=True)
+                            else: st.dataframe(slm_detail, use_container_width=True, hide_index=True)
+                        else: st.caption("Belum ada data kunjungan bulan ini.")
     
     else:
         col_left, col_right = st.columns(2, gap="medium")
@@ -1502,13 +1534,13 @@ elif st.session_state['app_mode'] == 'main':
                         if not tid_problems.empty and col_prob:
                             # --- FIX: LAST PROBLEM LOGIC WITH DATE ---
                             last_time = tid_problems[col_prob].max()
-                            if pd.notnull(last_time):
+                            if pd.notnull(last_time): 
                                 diff = datetime.now() - last_time
                                 days = diff.days
                                 date_fmt = last_time.strftime('%d-%b-%Y')
                                 
                                 if days > 0: rel_str = f"{days} hari lalu"
-                                else:
+                                else: 
                                     hrs = int(diff.seconds // 3600)
                                     rel_str = f"{hrs} jam lalu" if hrs > 0 else "Baru saja"
                                 time_str = f"{date_fmt} ({rel_str})"
