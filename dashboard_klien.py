@@ -408,7 +408,7 @@ elif st.session_state['app_mode'] == 'main':
                 return 0
 
         cat_label = h_cat.upper()
-        total_armada = 611 
+        total_armada = 543 
         
         if h_cat == 'MRI Project':
             col_status = next((c for c in df.columns if 'STATUS' in c and 'MRI' in c), 'STATUS MRI')
@@ -770,17 +770,19 @@ elif st.session_state['app_mode'] == 'main':
     if 'p_mon' not in st.session_state: st.session_state.p_mon = default_mon
     if 'p_week' not in st.session_state: st.session_state.p_week = 'All Week'
     if 'p_trend' not in st.session_state: st.session_state.p_trend = 'W1 vs W2'
+    if 'p_target' not in st.session_state: st.session_state.p_target = '-20%'
 
     def save_mon(): st.session_state.p_mon = st.session_state.w_mon
     def save_week(): st.session_state.p_week = st.session_state.w_week
     def save_trend(): st.session_state.p_trend = st.session_state.w_trend
+    def save_target(): st.session_state.p_target = st.session_state.w_target
 
     sel_mon = ""; prev_mon = ""; curr_mon_short = ""; prev_mon_short = ""; sort_week = "All Week"; comp_mode = ""
     use_color = False 
 
     if sel_cat != 'SparePart & Kaset':
         with filter_col:
-            f1, f2, f3, f4, f5 = st.columns([1.4, 1.2, 1.0, 0.6, 0.7], gap="small")
+            f1, f2, f3, f_tgt, f4, f5 = st.columns([1.1, 1.3, 1.3, 1.2, 0.5, 0.6], gap="small")
             with f1:
                 try: cur_ix_mon = months_en.index(st.session_state.p_mon)
                 except: cur_ix_mon = 0
@@ -795,10 +797,15 @@ elif st.session_state['app_mode'] == 'main':
                 try: cur_ix_trend = opts_trend.index(st.session_state.p_trend)
                 except: cur_ix_trend = 0
                 comp_mode = st.selectbox("Tren:", opts_trend, index=cur_ix_trend, key='w_trend', on_change=save_trend, label_visibility="collapsed")
+            with f_tgt:
+                opts_tgt = ['0%', '-10%', '-20%', '-30%', '-40%', '-50%']
+                try: cur_ix_tgt = opts_tgt.index(st.session_state.p_target)
+                except: cur_ix_tgt = 2
+                tgt_val = st.selectbox("Target:", opts_tgt, index=cur_ix_tgt, key='w_target', on_change=save_target, label_visibility="collapsed")
             with f4:
-                use_color = st.toggle("🎨", key=f"color_btn_{sel_cat}", help="Indikator Warna")
+                use_color = st.toggle("🎨", key=f"color_btn_{sel_cat}")
             with f5:
-                exec_toggle = st.toggle("🌙", value=st.session_state.theme_mode, key=f"theme_switch_{sel_cat}", help="Executive Mode")
+                exec_toggle = st.toggle("🌙", value=st.session_state.theme_mode, key=f"theme_switch_{sel_cat}")
                 if exec_toggle != st.session_state.theme_mode:
                     st.session_state.theme_mode = exec_toggle
                     st.rerun()
@@ -1365,10 +1372,10 @@ elif st.session_state['app_mode'] == 'main':
                             else:
                                 prob_dates_str = f"Tidak ada problem di {sort_week}"
                             
-                    st.info(f"📋 **History TID: {selected_tid}** ({selected_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
+                    st.info(f"📋 **History TID: {sel_tid}** ({sel_loc})\n\n⏰ **Last Problem:** {time_str}\n📅 **Tgl Problem ({sort_week}):** {prob_dates_str}")
 
                     if not df_slm.empty and 'BULAN_EN' in df_slm.columns:
-                        slm_detail = df_slm[(df_slm['TID'] == selected_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
+                        slm_detail = df_slm[(df_slm['TID'] == sel_tid) & (df_slm['BULAN_EN'] == sel_mon)].copy()
                         if not slm_detail.empty:
                             slm_detail = slm_detail.sort_values('TGL_VISIT', ascending=False).head(2); slm_detail['TGL_VISIT'] = slm_detail['TGL_VISIT'].dt.strftime('%d-%b-%Y')
                             col_action = next((c for c in slm_detail.columns if 'ACTION' in c.upper() or 'KETERANGAN' in c.upper()), None)
@@ -1405,15 +1412,57 @@ elif st.session_state['app_mode'] == 'main':
                 val = get_val_std(df_curr[df_curr['WEEK'] == w])
                 w_vals[w] = val; curr_total += val
                 
-            avg_val = curr_total / 4
             prob_val = (curr_total / val_total_atm * 100) if val_total_atm > 0 else 0
+            
+            # --- DYNAMIC TARGET LOGIC DARI DROPDOWN ---
+            target_str = st.session_state.get('w_target', '-20%')
+            try:
+                target_val_num = int(target_str.replace('%', '').replace('-', ''))
+                multiplier = (100 - target_val_num) / 100.0
+            except:
+                multiplier = 0.8
+                
+            max_limit_val = int(val_prev * multiplier)
 
             overview_data = { 
                 'TOTAL ATM': [str(val_total_atm)], f'{prev_mon_short}': [val_prev], 
                 'W1': [w_vals['W1']], 'W2': [w_vals['W2']], 'W3': [w_vals['W3']], 'W4': [w_vals['W4']], 
-                f'Σ {curr_mon_short}': [curr_total], 'AVG': [f"{avg_val:.1f}"], 'PROB %': [f"{prob_val:.2f}%"] 
+                f'Σ {curr_mon_short}': [curr_total], 'MAX LIMIT': [str(max_limit_val)], 'PROB %': [f"{prob_val:.2f}%"] 
             }
-            st.dataframe(get_styled_dataframe(clean_zeros(pd.DataFrame(overview_data))), use_container_width=True, hide_index=True)
+            
+            df_overview = clean_zeros(pd.DataFrame(overview_data))
+            overview_styler = get_styled_dataframe(df_overview)
+            
+            # --- INJEKSI LOGIKA WARNA DINAMIS MAX LIMIT ---
+            def highlight_max_limit(row):
+                styles = [''] * len(row)
+                try:
+                    col_curr = f'Σ {curr_mon_short}'
+                    if col_curr in row.index and 'MAX LIMIT' in row.index:
+                        # Hapus koma dan spasi ekstra sebelum konversi ke float
+                        curr_str = str(row[col_curr]).replace(',', '').strip()
+                        max_str = str(row['MAX LIMIT']).replace(',', '').strip()
+                        
+                        # Beri nilai default 0.0 jika data stringnya kosong karena efek clean_zeros
+                        curr_val = float(curr_str) if curr_str else 0.0
+                        max_val = float(max_str) if max_str else 0.0
+                        
+                        idx = row.index.get_loc(col_curr)
+                        if max_val > 0:
+                            ratio = curr_val / max_val
+                            # Catatan: Atribut '!important' DIBUANG dari CSS string karena membuat renderer React Streamlit crash.
+                            if ratio >= 1.0:
+                                styles[idx] = 'background-color: #FEE2E2; color: #B91C1C; font-weight: 800;' 
+                            elif ratio >= 0.8:
+                                styles[idx] = 'background-color: #FEF3C7; color: #D97706; font-weight: 800;' 
+                            else:
+                                styles[idx] = 'background-color: #DCFCE7; color: #15803D; font-weight: 800;' 
+                except Exception:
+                    pass
+                return styles
+                
+            overview_styler = overview_styler.apply(highlight_max_limit, axis=1)
+            st.dataframe(overview_styler, use_container_width=True, hide_index=True)
             
             # 2. RISK TIERS ANALYSIS
             st.markdown(f'<div class="section-header" style="margin-top: 15px;">⚠️ Risk Tiers Analysis</div>', unsafe_allow_html=True)
