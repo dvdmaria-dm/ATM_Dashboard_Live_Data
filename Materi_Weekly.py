@@ -208,6 +208,33 @@ st.markdown("""
             vertical-align: middle;
             margin-bottom: 2px;
         }
+
+        /* RESPONSIVE MOBILE OPTIMIZATION */
+        @media screen and (max-width: 768px) {
+            .main-header { flex-direction: column; align-items: flex-start; gap: 8px; height: auto; padding-bottom: 12px; }
+            .info-ticker-container { max-width: 100%; margin-left: 0; width: 100%; }
+            
+            .hero-section { flex-direction: column; padding: 20px; text-align: center; margin-top: 15px; }
+            .hero-left { border-left: none; border-bottom: 3px solid #F37021; padding-left: 0; padding-bottom: 15px; margin-bottom: 15px; align-items: center; width: 100%; }
+            .hero-right { padding-right: 0; }
+            .bri-logo-watermark { width: 150px; }
+            
+            div[data-testid="stRadio"] > div[role="radiogroup"], 
+            div.row-widget.stRadio > div[role="radiogroup"] { 
+                flex-wrap: nowrap !important; 
+                overflow-x: auto !important; 
+                -webkit-overflow-scrolling: touch; 
+                padding-bottom: 5px !important;
+            }
+            div[data-testid="stRadio"] > div[role="radiogroup"]::-webkit-scrollbar { height: 4px; display: block; }
+            div[data-testid="stRadio"] > div[role="radiogroup"]::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
+            
+            .table-scroll { overflow-x: auto !important; }
+            .dash-table { min-width: 700px; }
+            .log-table { min-width: 800px; }
+            
+            .home-card { margin-bottom: 10px; }
+        }
     </style>
 """, unsafe_allow_html=True)
 
