@@ -98,7 +98,16 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    .stTabs { margin-top: 0rem !important; }
+    /* HACK GRAVITASI: Sejajarkan Tabs dengan Dropdown Bulan di atasnya */
+    div[data-testid="stTabs"]:first-of-type { 
+        margin-top: -48px !important; 
+        position: relative; 
+        z-index: 10; 
+    }
+    div[data-testid="stSelectbox"]:first-of-type { 
+        z-index: 999 !important; 
+        position: relative;
+    }
 
     .custom-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, sans-serif; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background-color: white; border: 1px solid #ddd; }
     .custom-table th { background-color: #003366; color: white; text-align: center; padding: 7px; font-weight: bold; border: 1px solid #ddd; font-size: 12px; }
@@ -572,7 +581,6 @@ else:
             if latest_df.empty: 
                 return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Data waktu kosong</span></div>"
             
-            # AMBIL WAKTU TERATAS (MAX TIME) DAN FILTER SEMUA TID YANG SAMA WAKTUNYA
             max_time = latest_df.iloc[0][time_col]
             top_all = latest_df[latest_df[time_col] == max_time]
             
@@ -600,14 +608,12 @@ else:
         with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
 
     # ----------------------------------------
-    # FIX: SELECTBOX DIPINDAHKAN KE KOLOM AGAR TIDAK NABRAK EXPANDER
+    # DROPDOWN BULAN (SEJAJAR DENGAN TAB MELALUI HACK CSS)
     # ----------------------------------------
-    st.markdown("<style>.stSelectbox { margin-bottom: -15px; }</style>", unsafe_allow_html=True) # Perapat jarak dengan Tabs
-    col_space, col_sel = st.columns([8, 2])
+    col_empty, col_sel = st.columns([8, 2])
     with col_sel:
         selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
         
-    # UPDATE M1, M2, M3 JIKA BULAN DIUBAH
     if selected_period_str != m3_str:
         selected_idx = period_strings.index(selected_period_str)
         m3 = available_periods[selected_idx]
