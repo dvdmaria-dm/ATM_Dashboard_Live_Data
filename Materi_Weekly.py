@@ -235,6 +235,13 @@ st.markdown("""
             .log-table { min-width: 800px; }
             
             .home-card { margin-bottom: 10px; }
+            
+            /* Penyesuaian header text di mobile */
+            .header-title-text {
+                font-size: 14px !important;
+                padding-left: 8px !important;
+                margin-left: 8px !important;
+            }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -337,8 +344,8 @@ if not df_kelolaan.empty and 'CABANG' in df_kelolaan.columns and 'TTL ATM' in df
 current_date_full = datetime.now().strftime("%A, %d %B %Y")
 current_date_header = current_date_full.upper()
 
-# REVISI MARIA: MENGGANTI EMOJI DENGAN LOGO BRI ASLI DI HEADER
-st.markdown(f"<div class='main-header'><div style='display: flex; align-items: center; color: white; font-weight: bold; font-size: 22px; letter-spacing: 1px; white-space: nowrap;'><img src='https://upload.wikimedia.org/wikipedia/commons/9/97/Logo_BRI.png' style='height: 26px; margin-right: 10px; filter: brightness(0) invert(1);' alt='Logo BRI'> BANK BRI <span style='margin-left: 15px; font-weight: 400; font-size: 15px; opacity: 0.9;'>WEEKLY ATM PERFORMANCE REVIEW</span></div><div class='info-ticker-container'><div class='info-ticker-text'><span class='status-dot'></span>SYSTEM: SECURE & OPTIMAL &nbsp; | &nbsp; DATA LOADED &nbsp; | &nbsp; SERVER TIME: {current_date_header} &nbsp; | &nbsp; BANK BRI MONITORING ACTIVE &nbsp; | &nbsp; <span style='color: #FBBF24; font-weight: 800; letter-spacing: 1px;'>PT KELOLA JASA ARTHA</span></div></div></div>", unsafe_allow_html=True)
+# REVISI MARIA: PERBAIKAN LOGO GANDA & JUDUL LEBIH ELEGAN
+st.markdown(f"<div class='main-header'><div style='display: flex; align-items: center; white-space: nowrap;'><img src='https://upload.wikimedia.org/wikipedia/commons/9/97/Logo_BRI.png' style='height: 28px; filter: brightness(0) invert(1);' alt='Logo BRI'><span class='header-title-text' style='margin-left: 15px; padding-left: 15px; border-left: 2px solid #F37021; color: #FFFFFF; font-weight: 700; font-size: 18px; letter-spacing: 2px; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);'>WEEKLY ATM PERFORMANCE REVIEW</span></div><div class='info-ticker-container'><div class='info-ticker-text'><span class='status-dot'></span>SYSTEM: SECURE & OPTIMAL &nbsp; | &nbsp; DATA LOADED &nbsp; | &nbsp; SERVER TIME: {current_date_header} &nbsp; | &nbsp; BANK BRI MONITORING ACTIVE &nbsp; | &nbsp; <span style='color: #FBBF24; font-weight: 800; letter-spacing: 1px;'>PT KELOLA JASA ARTHA</span></div></div></div>", unsafe_allow_html=True)
 
 for msg in master_warnings:
     st.warning(msg)
