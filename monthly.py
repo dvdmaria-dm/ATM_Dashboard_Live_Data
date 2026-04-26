@@ -98,15 +98,20 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* HACK GRAVITASI: Sejajarkan Tabs dengan Dropdown Bulan di atasnya */
-    div[data-testid="stTabs"]:first-of-type { 
-        margin-top: -48px !important; 
-        position: relative; 
-        z-index: 10; 
+    /* HACK TINGKAT DEWA: Dropdown Float Kanan Tanpa Kolom Container */
+    div[data-testid="stSelectbox"] {
+        float: right !important;
+        width: 160px !important;
+        margin-bottom: -55px !important; /* Kekuatan sihirnya di sini: narik Tabs ke atas */
+        position: relative !important;
+        z-index: 9999 !important;
     }
-    div[data-testid="stSelectbox"]:first-of-type { 
-        z-index: 999 !important; 
+
+    /* Pastikan Margin Tabs Aman */
+    div[data-testid="stTabs"] { 
+        margin-top: 0px !important; 
         position: relative;
+        z-index: 10;
     }
 
     .custom-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, sans-serif; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background-color: white; border: 1px solid #ddd; }
@@ -608,11 +613,9 @@ else:
         with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
 
     # ----------------------------------------
-    # DROPDOWN BULAN (SEJAJAR DENGAN TAB MELALUI HACK CSS)
+    # HACK: SELECTBOX BERDIRI SENDIRI TANPA BUNGKUS KOLOM
     # ----------------------------------------
-    col_empty, col_sel = st.columns([8, 2])
-    with col_sel:
-        selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
+    selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
         
     if selected_period_str != m3_str:
         selected_idx = period_strings.index(selected_period_str)
