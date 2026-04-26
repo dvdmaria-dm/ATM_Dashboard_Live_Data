@@ -9,6 +9,7 @@ import urllib.parse
 from PIL import Image
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json
 
 # ==========================================
 # 0. GLOBAL CONFIGURATION & CONSTANTS
@@ -191,7 +192,11 @@ def load_data():
         df_master = df_master[expected_cols]
         df_master = df_master[df_master['KATEGORI'] != 'Cash Out']
         df_master['JUMLAH_COMPLAIN'] = pd.to_numeric(df_master['JUMLAH_COMPLAIN'], errors='coerce').fillna(0).astype(int)
+        
+        # PENYESUAIAN LOGIKA WAKTU (RADAR)
         df_master['TANGGAL'] = pd.to_datetime(df_master['TANGGAL'], errors='coerce')
+        df_master['WAKTU INSERT'] = pd.to_datetime(df_master['WAKTU INSERT'], errors='coerce')
+        
         df_master = df_master.dropna(subset=['TANGGAL']) 
         df_master['Periode'] = df_master['TANGGAL'].dt.to_period('M') 
         
@@ -563,6 +568,52 @@ else:
     m2 = available_periods[selected_idx - 1] if selected_idx >= 1 else m3
     m1 = available_periods[selected_idx - 2] if selected_idx >= 2 else m2
     m3_str = m3.strftime('%B %Y')
+
+    # ----------------------------------------
+    # RADAR LATEST INCIDENTS (EXPANDER)
+    # ----------------------------------------
+    with st.expander("📡 RADAR: LATEST INCIDENTS (Update Data Terakhir)", expanded=False):
+        r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+        
+        def format_radar(df_cat, cat_name, use_insert_time=False):
+            if df_cat.empty:
+                return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Belum ada data</span></div>"
+            
+            if use_insert_time:
+                latest_df = df_cat.dropna(subset=['WAKTU INSERT']).sort_values('WAKTU INSERT', ascending=False)
+                if latest_df.empty:
+                    latest_df = df_cat.sort_values('TANGGAL', ascending=False)
+                    time_col = 'TANGGAL'
+                else:
+                    time_col = 'WAKTU INSERT'
+            else:
+                latest_df = df_cat.dropna(subset=['TANGGAL']).sort_values('TANGGAL', ascending=False)
+                time_col = 'TANGGAL'
+                
+            if latest_df.empty: 
+                return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Data waktu kosong</span></div>"
+            
+            top1 = latest_df.iloc[0]
+            tid = top1['TID']
+            cab = top1['CABANG']
+            lok = str(top1['LOKASI'])[:15] + ".." if len(str(top1['LOKASI'])) > 15 else str(top1['LOKASI'])
+            t_val = top1[time_col]
+            
+            if pd.isna(t_val): t_str = "-"
+            else:
+                if use_insert_time and time_col == 'WAKTU INSERT':
+                    t_str = t_val.strftime('%d %b %Y %H:%M')
+                else:
+                    t_str = t_val.strftime('%d %b %Y')
+                    
+            return f"<div style='border-left: 3px solid #F37021; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:#ef4444; font-weight:bold; font-size:11px;'>Terbaru: {t_str}</span><br><b style='font-size:12px; color:#0f172a;'>{tid}</b><br><span style='font-size:11px; color:#475569;'>{cab} ({lok})</span></div>"
+
+        df_m3_all = df_master_enriched[df_master_enriched['Periode'] == m3]
+        
+        with r_col1: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Elastic'], "ELASTIC", False), unsafe_allow_html=True)
+        with r_col2: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Complain'], "COMPLAIN", False), unsafe_allow_html=True)
+        with r_col3: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('DF Repeat', case=False, na=False)], "DF REPEAT", True), unsafe_allow_html=True)
+        with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
 
     tab_home, tab_mri, tab_elastic, tab_complain, tab_df, tab_out, tab_logistic = st.tabs([
         "Home", "⭐ MRI PROJECT", "Elastic", "Complain", "DF Repeat", "OUT Flm", "Logistic"
