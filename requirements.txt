@@ -1,5 +1,7 @@
 streamlit
 pandas
+numpy
 plotly
+Pillow
 gspread
-gspread-pandas
+oauth2client
