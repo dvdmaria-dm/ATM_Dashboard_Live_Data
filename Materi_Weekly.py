@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import os
 
 # ==========================================
 # 1. KONFIGURASI PAGE & CSS ELEGANT TABS
@@ -39,7 +40,7 @@ st.markdown("""
         .table-scroll {
             max-height: 155px; 
             overflow-y: auto;
-            overflow-x: hidden;
+            overflow-x: auto;
             border-radius: 6px;
             border: 1px solid #E2E8F0;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); 
@@ -278,7 +279,46 @@ def load_data_gspread(worksheet_name, range_name=None):
         st.error(f"Gagal Load {worksheet_name}: {e}")
         return pd.DataFrame()
 
-df_master = load_data_gspread("AIMS_Master")
+def apply_fallback_logic(df_fresh):
+    backup_file = "backup_AIMS_Master.csv"
+    kategori_krusial = ["ELASTIC", "COMPLAIN", "DF REPEAT", "OUT FLM"]
+    warnings_list = []
+
+    if df_fresh.empty or 'KATEGORI' not in df_fresh.columns:
+        if os.path.exists(backup_file):
+            warnings_list.append("⚠️ Peringatan Krusial: Sheet AIMS_Master gagal ditarik atau kosong total. Menggunakan Salinan Backup Lokal.")
+            return pd.read_csv(backup_file, dtype=str), warnings_list
+        return df_fresh, warnings_list
+
+    df_fresh_check = df_fresh.copy()
+    df_fresh_check['KAT_CEK'] = df_fresh_check['KATEGORI'].astype(str).str.strip().str.upper()
+    df_final = df_fresh.copy()
+    
+    if os.path.exists(backup_file):
+        try:
+            df_backup = pd.read_csv(backup_file, dtype=str)
+            if 'KATEGORI' in df_backup.columns:
+                df_backup['KAT_CEK'] = df_backup['KATEGORI'].astype(str).str.strip().str.upper()
+                for cat in kategori_krusial:
+                    if df_fresh_check[df_fresh_check['KAT_CEK'] == cat].empty:
+                        df_cat_backup = df_backup[df_backup['KAT_CEK'] == cat]
+                        if not df_cat_backup.empty:
+                            df_cat_backup_clean = df_cat_backup.drop(columns=['KAT_CEK'], errors='ignore')
+                            df_final = pd.concat([df_final, df_cat_backup_clean], ignore_index=True)
+                            warnings_list.append(f"⚠️ Peringatan: Sumber Kategori '{cat}' terdeteksi kosong di Google Sheets. Menggabungkan dengan Salinan Backup Lokal.")
+        except Exception:
+            pass
+
+    try:
+        df_final.to_csv(backup_file, index=False)
+    except Exception:
+        pass
+
+    return df_final, warnings_list
+
+df_master_fresh = load_data_gspread("AIMS_Master")
+df_master, master_warnings = apply_fallback_logic(df_master_fresh)
+
 df_slm = load_data_gspread("SLM Visit Log")
 df_fup_elastic = load_data_gspread("Summary_Monitoring_Cash", "U3:Y7") 
 df_fup_complain = load_data_gspread("Summary_Monitoring_Cash", "U17:Y20") 
@@ -298,6 +338,9 @@ current_date_full = datetime.now().strftime("%A, %d %B %Y")
 current_date_header = current_date_full.upper()
 
 st.markdown(f"<div class='main-header'><div style='color: white; font-weight: bold; font-size: 22px; letter-spacing: 1px; white-space: nowrap;'>🏦 BANK BRI <span style='margin-left: 15px; font-weight: 400; font-size: 15px; opacity: 0.9;'>WEEKLY ATM PERFORMANCE REVIEW</span></div><div class='info-ticker-container'><div class='info-ticker-text'><span class='status-dot'></span>SYSTEM: SECURE & OPTIMAL &nbsp; | &nbsp; DATA LOADED &nbsp; | &nbsp; SERVER TIME: {current_date_header} &nbsp; | &nbsp; BANK BRI MONITORING ACTIVE &nbsp; | &nbsp; <span style='color: #FBBF24; font-weight: 800; letter-spacing: 1px;'>PT KELOLA JASA ARTHA</span></div></div></div>", unsafe_allow_html=True)
+
+for msg in master_warnings:
+    st.warning(msg)
 
 col_nav, col_space_top, col_filter1, col_filter2 = st.columns([6.4, 0.4, 1.7, 1.5])
 
