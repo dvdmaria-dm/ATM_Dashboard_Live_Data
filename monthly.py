@@ -9,6 +9,7 @@ import urllib.parse
 from PIL import Image
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import json
 
 # ==========================================
 # 0. GLOBAL CONFIGURATION & CONSTANTS
@@ -18,7 +19,6 @@ SPREADSHEET_ID = "1pApEIA9BEYEojW4a6Fvwykkf-z-UqeQ8u2pmrqQc340"
 # ==========================================
 # 1. KONFIGURASI HALAMAN UTAMA
 # ==========================================
-# Fungsi untuk Icon Tab Browser saja (Tetap butuh lokal agar tidak error di set_page_config)
 def get_image_base64(filepath):
     try:
         img = Image.open(filepath)
@@ -47,19 +47,24 @@ st.markdown("""
     .main {background-color: #F8F9FA; font-family: 'Segoe UI', Tahoma, sans-serif;}
     h1, h2, h3 {color: #003366; font-weight: 700;}
     
-    /* HEADER KORPORAT DENGAN RUNNING TEXT */
-    .corporate-header { background-color: #003366; color: white; padding: 5px 16px; height: 55px; border-radius: 4px; display: flex; align-items: center; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
-    .corporate-header h2 { margin: 0; color: white !important; font-size: 18px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center; white-space: nowrap; z-index: 10; }
+    /* HEADER KORPORAT DENGAN RUNNING TEXT DENGAN FIX OVERLAP */
+    .corporate-header { background-color: #003366; color: white; padding: 5px 16px; height: 55px; border-radius: 4px; display: flex; align-items: center; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
     
-    /* RUNNING TEXT STYLE (Setiap 1 Menit, Muncul & Hilang Lembut) */
+    /* H2 diberi background tembok solid agar ngeblok running text di belakangnya */
+    .corporate-header h2 { 
+        margin: 0; color: white !important; font-size: 18px; font-weight: bold; letter-spacing: 0.5px; 
+        display: flex; align-items: center; white-space: nowrap; z-index: 10; 
+        background-color: #003366; padding-right: 25px; height: 100%;
+    }
+    
     .ticker-wrapper {
         flex-grow: 1;
         overflow: hidden;
         white-space: nowrap;
-        margin-left: 40px; 
+        margin-left: 10px; 
         display: flex;
         align-items: center;
-        /* Efek Gradient agar teks pudar sebelum menabrak batas */
+        z-index: 1; /* Pastikan di bawah H2 */
         -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
         mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
     }
@@ -70,13 +75,12 @@ st.markdown("""
         color: #e2e8f0;
         letter-spacing: 0.5px;
         padding-left: 100%; 
-        /* Siklus 60 detik (1 Menit) */
         animation: slideTicker 60s linear infinite; 
     }
     @keyframes slideTicker {
         0% { transform: translateX(0); }
-        60% { transform: translateX(-100%); } /* Berjalan normal dan santai selama 36 detik */
-        100% { transform: translateX(-100%); } /* Sembunyi selama 24 detik sisanya */
+        60% { transform: translateX(-100%); } 
+        100% { transform: translateX(-100%); } 
     }
     .blink-dot {
         display: inline-block;
@@ -153,13 +157,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. FUNGSI KONEKSI TUNGGAL (EFFICIENT API)
+# 3. FUNGSI KONEKSI TUNGGAL (SMART AUTHENTICATION)
 # ==========================================
 @st.cache_resource
 def get_gspread_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+        
+        # Cek apakah jalan di Streamlit Cloud dengan fitur Secrets
+        if "gcp_creds" in st.secrets:
+            creds_dict = json.loads(st.secrets["gcp_creds"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            # Fallback untuk jalan di laptop lokalmu, Bang David
+            creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+            
         return gspread.authorize(creds)
     except Exception as e:
         st.error(f"Gagal otentikasi Google Sheets: {e}")
