@@ -50,7 +50,6 @@ st.markdown("""
     /* HEADER KORPORAT DENGAN RUNNING TEXT DENGAN FIX OVERLAP */
     .corporate-header { background-color: #003366; color: white; padding: 5px 16px; height: 55px; border-radius: 4px; display: flex; align-items: center; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
     
-    /* H2 diberi background tembok solid agar ngeblok running text di belakangnya */
     .corporate-header h2 { 
         margin: 0; color: white !important; font-size: 18px; font-weight: bold; letter-spacing: 0.5px; 
         display: flex; align-items: center; white-space: nowrap; z-index: 10; 
@@ -64,7 +63,7 @@ st.markdown("""
         margin-left: 10px; 
         display: flex;
         align-items: center;
-        z-index: 1; /* Pastikan di bawah H2 */
+        z-index: 1; 
         -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
         mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
     }
@@ -99,17 +98,6 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    div[data-testid="stSelectbox"]:first-of-type { position: absolute; right: 0.3rem; top: 0.5rem; width: 180px; z-index: 999; }
-    
-    /* FIX DROPDOWN (-10px) */
-    .stTabs div[data-testid="stSelectbox"] {
-        margin-top: -10px !important; 
-        float: right !important;
-        width: 140px !important; 
-        position: relative !important; 
-        z-index: 999 !important;
-    }
-
     .stTabs { margin-top: 0rem !important; }
 
     .custom-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, sans-serif; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background-color: white; border: 1px solid #ddd; }
@@ -128,7 +116,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 36px; white-space: pre-wrap; background-color: #e9ecef; border-radius: 4px 4px 0px 0px; gap: 1px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; padding-right: 15px; color: #003366; font-weight: bold; font-size: 13px; }
     .stTabs [aria-selected="true"] { background-color: #003366; color: white !important; }
 
-    /* CSS KHUSUS MENU HOME KPI CARDS & BANNER (DENGAN EFEK HOVER) */
+    /* CSS KHUSUS MENU HOME KPI CARDS & BANNER */
     .kpi-container { padding: 10px 0px 20px 0px; }
     .kpi-card { background-color: white; border-radius: 6px; padding: 25px 15px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; border-top: 4px solid transparent; transition: all 0.3s ease; }
     .kpi-card:hover { border-top: 4px solid #F37021; transform: translateY(-4px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
@@ -139,7 +127,6 @@ st.markdown("""
     .banner-container { background-color: #003366; border-radius: 6px; padding: 40px 50px; margin-top: 5px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
     .banner-left { border-left: 5px solid #F37021; padding-left: 25px; }
     
-    /* Efek Hover Pada Teks Banner */
     .banner-title, .banner-subtitle, .banner-text { transition: transform 0.3s ease, color 0.3s ease, text-shadow 0.3s ease; }
     .banner-title { color: #FBBF24; font-size: 32px; font-weight: 800; letter-spacing: 1px; margin-bottom: 15px; display: inline-block; }
     .banner-container:hover .banner-title { transform: translateX(8px); text-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
@@ -150,7 +137,6 @@ st.markdown("""
     .banner-text { color: #cbd5e1; font-size: 14px; margin-bottom: 8px; font-weight: 500; display: inline-block; }
     .banner-container:hover .banner-text { transform: translateX(8px); }
 
-    /* Efek Hover Pada Logo Banner */
     .banner-logo img { height: 70px; filter: brightness(0) invert(1); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     .banner-logo img:hover { transform: scale(1.15); }
     </style>
@@ -163,16 +149,11 @@ st.markdown("""
 def get_gspread_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        
-        # Cek apakah jalan di Streamlit Cloud dengan fitur Secrets native TOML
         if "gcp_service_account" in st.secrets:
-            # Dikonversi jadi dictionary murni
             creds_dict = dict(st.secrets["gcp_service_account"])
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
-            # Fallback untuk jalan di laptop lokalmu, Bang David
             creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-            
         return gspread.authorize(creds)
     except Exception as e:
         st.error(f"Gagal otentikasi Google Sheets: {e}")
@@ -561,9 +542,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
     
-    selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=len(period_strings)-1, label_visibility="collapsed")
-
-    selected_idx = period_strings.index(selected_period_str)
+    selected_idx = len(period_strings) - 1
     m3 = available_periods[selected_idx]
     m2 = available_periods[selected_idx - 1] if selected_idx >= 1 else m3
     m1 = available_periods[selected_idx - 2] if selected_idx >= 2 else m2
@@ -593,20 +572,25 @@ else:
             if latest_df.empty: 
                 return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Data waktu kosong</span></div>"
             
-            top1 = latest_df.iloc[0]
-            tid = top1['TID']
-            cab = top1['CABANG']
-            lok = str(top1['LOKASI'])[:15] + ".." if len(str(top1['LOKASI'])) > 15 else str(top1['LOKASI'])
-            t_val = top1[time_col]
+            # AMBIL WAKTU TERATAS (MAX TIME) DAN FILTER SEMUA TID YANG SAMA WAKTUNYA
+            max_time = latest_df.iloc[0][time_col]
+            top_all = latest_df[latest_df[time_col] == max_time]
             
-            if pd.isna(t_val): t_str = "-"
+            tid_list_html = ""
+            for _, row in top_all.iterrows():
+                tid = row['TID']
+                cab = row['CABANG']
+                lok = str(row['LOKASI'])[:18] + ".." if len(str(row['LOKASI'])) > 18 else str(row['LOKASI'])
+                tid_list_html += f"<div style='margin-bottom: 4px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 2px;'><b style='font-size:12px; color:#0f172a;'>{tid}</b> <span style='font-size:11px; color:#475569;'>- {cab} ({lok})</span></div>"
+            
+            if pd.isna(max_time): t_str = "-"
             else:
                 if use_insert_time and time_col == 'WAKTU INSERT':
-                    t_str = t_val.strftime('%d %b %Y %H:%M')
+                    t_str = max_time.strftime('%d %b %Y %H:%M')
                 else:
-                    t_str = t_val.strftime('%d %b %Y')
+                    t_str = max_time.strftime('%d %b %Y')
                     
-            return f"<div style='border-left: 3px solid #F37021; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:#ef4444; font-weight:bold; font-size:11px;'>Terbaru: {t_str}</span><br><b style='font-size:12px; color:#0f172a;'>{tid}</b><br><span style='font-size:11px; color:#475569;'>{cab} ({lok})</span></div>"
+            return f"<div style='border-left: 3px solid #F37021; padding-left: 10px; margin-bottom: 5px; max-height: 150px; overflow-y: auto; padding-right: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:#ef4444; font-weight:bold; font-size:11px;'>Terbaru: {t_str} | Total: {len(top_all)} Unit</span><br><div style='margin-top: 6px;'>{tid_list_html}</div></div>"
 
         df_m3_all = df_master_enriched[df_master_enriched['Periode'] == m3]
         
@@ -614,6 +598,22 @@ else:
         with r_col2: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Complain'], "COMPLAIN", False), unsafe_allow_html=True)
         with r_col3: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('DF Repeat', case=False, na=False)], "DF REPEAT", True), unsafe_allow_html=True)
         with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
+
+    # ----------------------------------------
+    # FIX: SELECTBOX DIPINDAHKAN KE KOLOM AGAR TIDAK NABRAK EXPANDER
+    # ----------------------------------------
+    st.markdown("<style>.stSelectbox { margin-bottom: -15px; }</style>", unsafe_allow_html=True) # Perapat jarak dengan Tabs
+    col_space, col_sel = st.columns([8, 2])
+    with col_sel:
+        selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
+        
+    # UPDATE M1, M2, M3 JIKA BULAN DIUBAH
+    if selected_period_str != m3_str:
+        selected_idx = period_strings.index(selected_period_str)
+        m3 = available_periods[selected_idx]
+        m2 = available_periods[selected_idx - 1] if selected_idx >= 1 else m3
+        m1 = available_periods[selected_idx - 2] if selected_idx >= 2 else m2
+        m3_str = m3.strftime('%B %Y')
 
     tab_home, tab_mri, tab_elastic, tab_complain, tab_df, tab_out, tab_logistic = st.tabs([
         "Home", "⭐ MRI PROJECT", "Elastic", "Complain", "DF Repeat", "OUT Flm", "Logistic"
