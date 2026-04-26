@@ -98,11 +98,16 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* HACK TINGKAT DEWA: Dropdown Float Kanan Tanpa Kolom Container */
+    /* HACK TINGKAT DEWA: Pemusnahan Spasi antara Expander, Dropdown, dan Tabs */
+    [data-testid="stExpander"] {
+        margin-bottom: -20px !important; /* Pangkas jarak bawaan di bawah expander */
+    }
+    
     div[data-testid="stSelectbox"] {
         float: right !important;
         width: 160px !important;
-        margin-bottom: -55px !important; /* Kekuatan sihirnya di sini: narik Tabs ke atas */
+        margin-top: -15px !important; /* Tarik selectbox ke atas */
+        margin-bottom: -62px !important; /* Tarik Tabs ke atas menelan sisa spasi */
         position: relative !important;
         z-index: 9999 !important;
     }
