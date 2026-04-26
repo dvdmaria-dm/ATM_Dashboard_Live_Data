@@ -9,7 +9,6 @@ import urllib.parse
 from PIL import Image
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import json
 
 # ==========================================
 # 0. GLOBAL CONFIGURATION & CONSTANTS
@@ -164,9 +163,10 @@ def get_gspread_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # Cek apakah jalan di Streamlit Cloud dengan fitur Secrets
-        if "gcp_creds" in st.secrets:
-            creds_dict = json.loads(st.secrets["gcp_creds"])
+        # Cek apakah jalan di Streamlit Cloud dengan fitur Secrets native TOML
+        if "gcp_service_account" in st.secrets:
+            # Dikonversi jadi dictionary murni
+            creds_dict = dict(st.secrets["gcp_service_account"])
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
             # Fallback untuk jalan di laptop lokalmu, Bang David
