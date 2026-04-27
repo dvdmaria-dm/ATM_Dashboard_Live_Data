@@ -98,9 +98,16 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* HACK TINGKAT DEWA: Pemusnahan Spasi */
-    [data-testid="stExpander"] { margin-bottom: -20px !important; }
-    div[data-testid="stSelectbox"] { float: right !important; width: 160px !important; margin-top: -15px !important; margin-bottom: -62px !important; position: relative !important; z-index: 9999 !important; }
+    /* HACK TINGKAT DEWA: Pemusnahan Spasi & Perbaikan Posisi Dropdown */
+    [data-testid="stExpander"] { margin-bottom: -10px !important; }
+    div[data-testid="stSelectbox"] { 
+        float: right !important; 
+        width: 160px !important; 
+        margin-top: 2px !important; /* Diubah: Dorong sedikit ke bawah agar tidak nabrak expander */
+        margin-bottom: -45px !important; /* Diubah: Menyesuaikan agar sejajar mulus dengan tinggi tab */
+        position: relative !important; 
+        z-index: 9999 !important; 
+    }
     div[data-testid="stTabs"] { margin-top: 0px !important; position: relative; z-index: 10; }
 
     .custom-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, sans-serif; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background-color: white; border: 1px solid #ddd; }
