@@ -98,21 +98,14 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* HACK TINGKAT DEWA: Pemusnahan Spasi antara Expander, Dropdown, dan Tabs */
-    [data-testid="stExpander"] {
-        margin-bottom: -20px !important; /* Pangkas jarak bawaan di bawah expander */
+    /* CSS BARU: Mengamankan Spasi Tanpa Float */
+    div[data-testid="stExpander"] {
+        margin-bottom: 0px !important; 
+        padding-bottom: 0px !important;
     }
-    
-    div[data-testid="stSelectbox"] {
-        float: right !important;
-        width: 160px !important;
-        margin-top: -15px !important; /* Tarik selectbox ke atas */
-        margin-bottom: -62px !important; /* Tarik Tabs ke atas menelan sisa spasi */
-        position: relative !important;
-        z-index: 9999 !important;
+    div[data-testid="stVerticalBlock"] > div { 
+        margin-top: -5px !important; 
     }
-
-    /* Pastikan Margin Tabs Aman */
     div[data-testid="stTabs"] { 
         margin-top: 0px !important; 
         position: relative;
@@ -568,66 +561,66 @@ else:
     m3_str = m3.strftime('%B %Y')
 
     # ----------------------------------------
-    # RADAR LATEST INCIDENTS (EXPANDER)
+    # HACK BARU KITA: MEMBELAH BARIS JADI 2 KOLOM (KIRI RADAR, KANAN DROPDOWN)
     # ----------------------------------------
-    with st.expander("📡 RADAR: LATEST INCIDENTS (Update Data Terakhir)", expanded=False):
-        r_col1, r_col2, r_col3, r_col4 = st.columns(4)
-        
-        def format_radar(df_cat, cat_name, use_insert_time=False):
-            if df_cat.empty:
-                return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Belum ada data</span></div>"
+    col_radar, col_period = st.columns([8.5, 1.5])
+    
+    with col_period:
+        selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
+        if selected_period_str != m3_str:
+            selected_idx = period_strings.index(selected_period_str)
+            m3 = available_periods[selected_idx]
+            m2 = available_periods[selected_idx - 1] if selected_idx >= 1 else m3
+            m1 = available_periods[selected_idx - 2] if selected_idx >= 2 else m2
+            m3_str = m3.strftime('%B %Y')
+
+    with col_radar:
+        with st.expander("📡 RADAR: LATEST INCIDENTS (Update Data Terakhir)", expanded=False):
+            r_col1, r_col2, r_col3, r_col4 = st.columns(4)
             
-            if use_insert_time:
-                latest_df = df_cat.dropna(subset=['WAKTU INSERT']).sort_values('WAKTU INSERT', ascending=False)
-                if latest_df.empty:
-                    latest_df = df_cat.sort_values('TANGGAL', ascending=False)
-                    time_col = 'TANGGAL'
-                else:
-                    time_col = 'WAKTU INSERT'
-            else:
-                latest_df = df_cat.dropna(subset=['TANGGAL']).sort_values('TANGGAL', ascending=False)
-                time_col = 'TANGGAL'
+            def format_radar(df_cat, cat_name, use_insert_time=False):
+                if df_cat.empty:
+                    return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Belum ada data</span></div>"
                 
-            if latest_df.empty: 
-                return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Data waktu kosong</span></div>"
-            
-            max_time = latest_df.iloc[0][time_col]
-            top_all = latest_df[latest_df[time_col] == max_time]
-            
-            tid_list_html = ""
-            for _, row in top_all.iterrows():
-                tid = row['TID']
-                cab = row['CABANG']
-                lok = str(row['LOKASI'])[:18] + ".." if len(str(row['LOKASI'])) > 18 else str(row['LOKASI'])
-                tid_list_html += f"<div style='margin-bottom: 4px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 2px;'><b style='font-size:12px; color:#0f172a;'>{tid}</b> <span style='font-size:11px; color:#475569;'>- {cab} ({lok})</span></div>"
-            
-            if pd.isna(max_time): t_str = "-"
-            else:
-                if use_insert_time and time_col == 'WAKTU INSERT':
-                    t_str = max_time.strftime('%d %b %Y %H:%M')
+                if use_insert_time:
+                    latest_df = df_cat.dropna(subset=['WAKTU INSERT']).sort_values('WAKTU INSERT', ascending=False)
+                    if latest_df.empty:
+                        latest_df = df_cat.sort_values('TANGGAL', ascending=False)
+                        time_col = 'TANGGAL'
+                    else:
+                        time_col = 'WAKTU INSERT'
                 else:
-                    t_str = max_time.strftime('%d %b %Y')
+                    latest_df = df_cat.dropna(subset=['TANGGAL']).sort_values('TANGGAL', ascending=False)
+                    time_col = 'TANGGAL'
                     
-            return f"<div style='border-left: 3px solid #F37021; padding-left: 10px; margin-bottom: 5px; max-height: 150px; overflow-y: auto; padding-right: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:#ef4444; font-weight:bold; font-size:11px;'>Terbaru: {t_str} | Total: {len(top_all)} Unit</span><br><div style='margin-top: 6px;'>{tid_list_html}</div></div>"
+                if latest_df.empty: 
+                    return f"<div style='border-left: 3px solid #cbd5e1; padding-left: 10px; margin-bottom: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:gray; font-size:11px;'>Data waktu kosong</span></div>"
+                
+                max_time = latest_df.iloc[0][time_col]
+                top_all = latest_df[latest_df[time_col] == max_time]
+                
+                tid_list_html = ""
+                for _, row in top_all.iterrows():
+                    tid = row['TID']
+                    cab = row['CABANG']
+                    lok = str(row['LOKASI'])[:18] + ".." if len(str(row['LOKASI'])) > 18 else str(row['LOKASI'])
+                    tid_list_html += f"<div style='margin-bottom: 4px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 2px;'><b style='font-size:12px; color:#0f172a;'>{tid}</b> <span style='font-size:11px; color:#475569;'>- {cab} ({lok})</span></div>"
+                
+                if pd.isna(max_time): t_str = "-"
+                else:
+                    if use_insert_time and time_col == 'WAKTU INSERT':
+                        t_str = max_time.strftime('%d %b %Y %H:%M')
+                    else:
+                        t_str = max_time.strftime('%d %b %Y')
+                        
+                return f"<div style='border-left: 3px solid #F37021; padding-left: 10px; margin-bottom: 5px; max-height: 150px; overflow-y: auto; padding-right: 5px;'><b style='color:#003366; font-size:13px;'>{cat_name}</b><br><span style='color:#ef4444; font-weight:bold; font-size:11px;'>Terbaru: {t_str} | Total: {len(top_all)} Unit</span><br><div style='margin-top: 6px;'>{tid_list_html}</div></div>"
 
-        df_m3_all = df_master_enriched[df_master_enriched['Periode'] == m3]
-        
-        with r_col1: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Elastic'], "ELASTIC", False), unsafe_allow_html=True)
-        with r_col2: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Complain'], "COMPLAIN", False), unsafe_allow_html=True)
-        with r_col3: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('DF Repeat', case=False, na=False)], "DF REPEAT", True), unsafe_allow_html=True)
-        with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
-
-    # ----------------------------------------
-    # HACK: SELECTBOX BERDIRI SENDIRI TANPA BUNGKUS KOLOM
-    # ----------------------------------------
-    selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
-        
-    if selected_period_str != m3_str:
-        selected_idx = period_strings.index(selected_period_str)
-        m3 = available_periods[selected_idx]
-        m2 = available_periods[selected_idx - 1] if selected_idx >= 1 else m3
-        m1 = available_periods[selected_idx - 2] if selected_idx >= 2 else m2
-        m3_str = m3.strftime('%B %Y')
+            df_m3_all = df_master_enriched[df_master_enriched['Periode'] == m3]
+            
+            with r_col1: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Elastic'], "ELASTIC", False), unsafe_allow_html=True)
+            with r_col2: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'] == 'Complain'], "COMPLAIN", False), unsafe_allow_html=True)
+            with r_col3: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('DF Repeat', case=False, na=False)], "DF REPEAT", True), unsafe_allow_html=True)
+            with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
 
     tab_home, tab_mri, tab_elastic, tab_complain, tab_df, tab_out, tab_logistic = st.tabs([
         "Home", "⭐ MRI PROJECT", "Elastic", "Complain", "DF Repeat", "OUT Flm", "Logistic"
