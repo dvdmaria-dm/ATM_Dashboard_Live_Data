@@ -98,26 +98,10 @@ st.markdown("""
         100% { opacity: 0.4; transform: scale(0.8); }
     }
 
-    /* HACK TINGKAT DEWA: Pemusnahan Spasi antara Expander, Dropdown, dan Tabs */
-    [data-testid="stExpander"] {
-        margin-bottom: -20px !important; /* Pangkas jarak bawaan di bawah expander */
-    }
-    
-    div[data-testid="stSelectbox"] {
-        float: right !important;
-        width: 160px !important;
-        margin-top: -15px !important; /* Tarik selectbox ke atas */
-        margin-bottom: -62px !important; /* Tarik Tabs ke atas menelan sisa spasi */
-        position: relative !important;
-        z-index: 9999 !important;
-    }
-
-    /* Pastikan Margin Tabs Aman */
-    div[data-testid="stTabs"] { 
-        margin-top: 0px !important; 
-        position: relative;
-        z-index: 10;
-    }
+    /* HACK TINGKAT DEWA: Pemusnahan Spasi */
+    [data-testid="stExpander"] { margin-bottom: -20px !important; }
+    div[data-testid="stSelectbox"] { float: right !important; width: 160px !important; margin-top: -15px !important; margin-bottom: -62px !important; position: relative !important; z-index: 9999 !important; }
+    div[data-testid="stTabs"] { margin-top: 0px !important; position: relative; z-index: 10; }
 
     .custom-table { width: 100%; border-collapse: collapse; font-family: 'Segoe UI', Tahoma, sans-serif; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background-color: white; border: 1px solid #ddd; }
     .custom-table th { background-color: #003366; color: white; text-align: center; padding: 7px; font-weight: bold; border: 1px solid #ddd; font-size: 12px; }
@@ -128,14 +112,12 @@ st.markdown("""
 
     .table-title { color: #003366; font-weight: bold; margin-bottom: 5px; font-size: 14px; margin-top: 8px !important; }
     .inline-title { color: #003366; font-weight: bold; font-size: 14px; margin-top: 10px; margin-bottom: 0px; }
-
     .action-box { background-color: white; padding: 10px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; color: #333; box-shadow: 0 1px 3px rgba(0,0,0,0.05); white-space: pre-wrap; }
     
     .stTabs [data-baseweb="tab-list"] { gap: 5px; margin-bottom: 2px !important; } 
     .stTabs [data-baseweb="tab"] { height: 36px; white-space: pre-wrap; background-color: #e9ecef; border-radius: 4px 4px 0px 0px; gap: 1px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; padding-right: 15px; color: #003366; font-weight: bold; font-size: 13px; }
     .stTabs [aria-selected="true"] { background-color: #003366; color: white !important; }
 
-    /* CSS KHUSUS MENU HOME KPI CARDS & BANNER */
     .kpi-container { padding: 10px 0px 20px 0px; }
     .kpi-card { background-color: white; border-radius: 6px; padding: 25px 15px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; border-top: 4px solid transparent; transition: all 0.3s ease; }
     .kpi-card:hover { border-top: 4px solid #F37021; transform: translateY(-4px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
@@ -179,7 +161,7 @@ def get_gspread_client():
         return None
 
 # ==========================================
-# 4. FUNGSI PENARIKAN DATA
+# 4. FUNGSI PENARIKAN DATA (DENGAN ERROR HANDLING UI)
 # ==========================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_data():
@@ -193,7 +175,6 @@ def load_data():
         df_master = df_master[df_master['KATEGORI'] != 'Cash Out']
         df_master['JUMLAH_COMPLAIN'] = pd.to_numeric(df_master['JUMLAH_COMPLAIN'], errors='coerce').fillna(0).astype(int)
         
-        # PENYESUAIAN LOGIKA WAKTU (RADAR)
         df_master['TANGGAL'] = pd.to_datetime(df_master['TANGGAL'], errors='coerce')
         df_master['WAKTU INSERT'] = pd.to_datetime(df_master['WAKTU INSERT'], errors='coerce')
         
@@ -206,7 +187,7 @@ def load_data():
         df_asset['TOTAL ATM REAL'] = pd.to_numeric(df_asset['TOTAL ATM REAL'], errors='coerce').fillna(0).astype(int)
         return pd.merge(df_master, df_asset, on='CABANG', how='left')
     except Exception as e: 
-        print(f"Error load_data: {e}")
+        st.toast(f"Data AIMS Master gagal ditarik: {e}", icon="⚠️")
         return pd.DataFrame()
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -227,7 +208,9 @@ def load_mri_data():
             df['CPC'] = df['CPC'].astype(str).str.replace('(?i)KEJAR ', '', regex=True).str.upper()
             return df
         return pd.DataFrame()
-    except Exception: return pd.DataFrame()
+    except Exception as e: 
+        st.toast(f"Data MRI gagal ditarik: {e}", icon="⚠️")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_slm_visit_data():
@@ -246,7 +229,9 @@ def load_slm_visit_data():
         df_res['ACTION'] = df_raw[6].astype(str).str.strip()
         df_res['TGL_VISIT_DT'] = pd.to_datetime(df_res['TGL_VISIT'], errors='coerce') 
         return df_res
-    except Exception: return pd.DataFrame()
+    except Exception as e: 
+        st.toast(f"Data SLM Visit gagal ditarik: {e}", icon="⚠️")
+        return pd.DataFrame()
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_elastic_followup_data():
@@ -348,6 +333,7 @@ def get_tiering_complain(df_sub):
 # 6. FUNGSI MASTER UI (DRY PRINCIPLE)
 # ==========================================
 def build_category_dashboard(kat_name, df_kat, m1, m2, m3, m3_str, df_followup=pd.DataFrame(), calc_method='freq'):
+    df_inputs = load_dashboard_inputs() # LAZY LOAD INPUTS
     lbl = ["PERGANTIAN PART", "ENVIRONMENT", "REPAIR SPAREPART", "DLL"]
     act_plan, q1, q2, q3, q4 = get_latest_input(df_inputs, m3_str, kat_name)
     
@@ -521,23 +507,12 @@ def build_category_dashboard(kat_name, df_kat, m1, m2, m3, m3_str, df_followup=p
             st.markdown(f'<table class="custom-table"><tr><th style="width: 12%;">TOTAL ATM</th><th style="width: 38%;">CABANG</th><th style="width: 10%;">{m1.strftime("%B")}</th><th style="width: 10%;">{m2.strftime("%B")}</th><th style="width: 10%;">{m3.strftime("%B")}</th><th style="width: 20%;">Δ MoM</th></tr>{table_rows_top5}</table>', unsafe_allow_html=True)
 
 # ==========================================
-# 7. LOAD SEMUA DATA
+# 7. RENDERING DASHBOARD UTAMA (DENGAN LAZY LOADING)
 # ==========================================
-df_master_enriched = load_data()
-df_mri_master = load_mri_data()
-df_slm_visit = load_slm_visit_data() 
-df_elastic_fu = load_elastic_followup_data()
-df_complain_fu = load_complain_followup_data()
-df_log_cassette = load_logistic_data("Stock_Cassette", "A1:F10")
-df_log_thermal = load_logistic_data("Stock_Thermal", "A1:D10")
-df_log_sdm = load_logistic_data("Stock_SDM", "A1:Q10")
-df_inputs = load_dashboard_inputs() 
+df_master_enriched = load_data() # Master data tetap diload awal karena dipakai di Radar & Selectbox
 
-# ==========================================
-# 8. RENDERING DASHBOARD UTAMA
-# ==========================================
 if df_master_enriched.empty:
-    st.warning("Data kosong. Tidak ada yang bisa ditampilkan, David.")
+    st.warning("Data AIMS Master kosong. Tidak ada yang bisa ditampilkan, David.")
 else:
     available_periods = sorted(df_master_enriched['Periode'].unique())
     period_strings = [p.strftime('%B %Y') for p in available_periods]
@@ -618,7 +593,7 @@ else:
         with r_col4: st.markdown(format_radar(df_m3_all[df_m3_all['KATEGORI'].str.contains('OUT Flm', case=False, na=False)], "OUT FLM", True), unsafe_allow_html=True)
 
     # ----------------------------------------
-    # HACK: SELECTBOX BERDIRI SENDIRI TANPA BUNGKUS KOLOM
+    # SELECTBOX PERIODE
     # ----------------------------------------
     selected_period_str = st.selectbox("Pilih Bulan", period_strings, index=selected_idx, label_visibility="collapsed")
         
@@ -710,7 +685,13 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
+    # ----------------------------------------
+    # TAB MRI (LAZY LOAD APPLIED)
+    # ----------------------------------------
     with tab_mri:
+        df_mri_master = load_mri_data() # LAZY LOAD
+        df_slm_visit = load_slm_visit_data() # LAZY LOAD
+        
         if not df_mri_master.empty:
             df_m3 = df_mri_master[df_mri_master['Periode'] == m3]
             df_m2 = df_mri_master[df_mri_master['Periode'] == m2]
@@ -860,13 +841,15 @@ else:
         else: st.warning("Data MRI Project kosong atau gagal ditarik.")
 
     # ==========================================
-    # TAB ELASTIC, COMPLAIN, DF REPEAT, OUT FLM (IMPLEMENTASI DRY CODE)
+    # TAB ELASTIC, COMPLAIN, DF REPEAT, OUT FLM (LAZY LOAD APPLIED)
     # ==========================================
     with tab_elastic:
+        df_elastic_fu = load_elastic_followup_data() # LAZY LOAD
         df_kat = df_master_enriched[df_master_enriched['KATEGORI'] == 'Elastic']
         build_category_dashboard("Elastic", df_kat, m1, m2, m3, m3_str, df_followup=df_elastic_fu, calc_method='freq')
 
     with tab_complain:
+        df_complain_fu = load_complain_followup_data() # LAZY LOAD
         df_kat = df_master_enriched[df_master_enriched['KATEGORI'] == 'Complain']
         build_category_dashboard("Complain", df_kat, m1, m2, m3, m3_str, df_followup=df_complain_fu, calc_method='complain')
 
@@ -879,13 +862,14 @@ else:
         build_category_dashboard("OUT Flm", df_kat, m1, m2, m3, m3_str, calc_method='freq')
 
     # ==========================================
-    # TAB LOGISTIC
+    # TAB LOGISTIC (LAZY LOAD APPLIED)
     # ==========================================
     with tab_logistic:
         st.markdown("<div class='table-title' style='margin-bottom: 15px;'>Manajemen Logistik & Resource SDM</div>", unsafe_allow_html=True)
         sub_cassete, sub_thermal, sub_sparepart, sub_sdm, sub_pm = st.tabs(["Stock Cassete", "Stock Thermal", "Stock Sparepart", "Jumlah Teknisi atau SDM", "Preventive Maintenance (PM)"])
         
         with sub_cassete:
+            df_log_cassette = load_logistic_data("Stock_Cassette", "A1:F10") # LAZY LOAD
             if not df_log_cassette.empty:
                 html_cassette = "<div class='table-title'>Data Stock Cassette per Cabang</div><table class='custom-table' style='width: auto; min-width: 60%;'><tr>"
                 for col in df_log_cassette.columns: html_cassette += f"<th>{col}</th>"
@@ -898,6 +882,7 @@ else:
             else: st.warning("Data Stock Cassette masih kosong atau gagal ditarik.")
             
         with sub_thermal:
+            df_log_thermal = load_logistic_data("Stock_Thermal", "A1:D10") # LAZY LOAD
             if not df_log_thermal.empty:
                 html_thermal = "<div class='table-title'>Data Stock Thermal per Cabang</div><table class='custom-table' style='width: auto; min-width: 50%;'><tr>"
                 for col in df_log_thermal.columns: html_thermal += f"<th>{col}</th>"
@@ -915,7 +900,7 @@ else:
             
             for tab_obj, r_name in zip([m_hys, m_win, m_ncr], ["A1:W10", "A12:W21", "A23:Q32"]):
                 with tab_obj:
-                    df_sp = load_worksheet_range("Stock_Sparepart", r_name)
+                    df_sp = load_worksheet_range("Stock_Sparepart", r_name) # LAZY LOAD
                     if not df_sp.empty:
                         html_sp = "<table class='custom-table'><tr>" + "".join([f"<th>{c}</th>" for c in df_sp.columns]) + "</tr>"
                         for _, r in df_sp.iterrows(): html_sp += "<tr>" + "".join([f"<td>{v}</td>" for v in r]) + "</tr>"
@@ -923,6 +908,7 @@ else:
                     else: st.warning(f"Data Kosong / Gagal ditarik dari Range {r_name}.")
 
         with sub_sdm: 
+            df_log_sdm = load_logistic_data("Stock_SDM", "A1:Q10") # LAZY LOAD
             if not df_log_sdm.empty:
                 html_sdm = "<div class='table-title'>Data Resource SDM / Teknisi</div><table class='custom-table' style='width: auto; min-width: 60%;'><tr>"
                 for col in df_log_sdm.columns: html_sdm += f"<th>{col}</th>"
@@ -940,7 +926,7 @@ else:
             
             for tab_obj, r_name, lbl in zip([pm_mesin, pm_cassette], ["A1:E3", "A6:E9"], ["Mesin", "Cassette"]):
                 with tab_obj:
-                    df_pm = load_worksheet_range("Preventive_Maintenance", r_name)
+                    df_pm = load_worksheet_range("Preventive_Maintenance", r_name) # LAZY LOAD
                     if not df_pm.empty:
                         html_pm = "<table class='custom-table' style='width: auto; min-width: 50%;'><tr>" + "".join([f"<th>{c}</th>" for c in df_pm.columns]) + "</tr>"
                         for _, r in df_pm.iterrows(): html_pm += "<tr>" + "".join([f"<td>{v if pd.notna(v) else ''}</td>" for v in r]) + "</tr>"
