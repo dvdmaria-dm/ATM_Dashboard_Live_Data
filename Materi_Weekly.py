@@ -281,38 +281,62 @@ def load_data_gspread(worksheet_name, range_name=None):
         st.error(f"Gagal Load {worksheet_name}: {e}")
         return pd.DataFrame()
 
-# MARIA FIX: Fungsi ini di-cache agar I/O File CSV tidak berjalan setiap ada interaksi tombol!
+# ==========================================
+# REVISI MARIA: LOGIKA PENJAHITAN DATA FALLBACK 
+# ==========================================
 @st.cache_data(ttl=3600)
 def apply_fallback_logic(df_fresh):
     backup_file = "backup_AIMS_Master.csv"
     kategori_krusial = ["ELASTIC", "COMPLAIN", "DF REPEAT", "OUT FLM"]
     warnings_list = []
 
+    # Skenario 1: Data Google Sheets Kosong Total
     if df_fresh.empty or 'KATEGORI' not in df_fresh.columns:
         if os.path.exists(backup_file):
-            warnings_list.append("⚠️ Peringatan Krusial: Sheet AIMS_Master gagal ditarik atau kosong total. Menggunakan Salinan Backup Lokal.")
-            return pd.read_csv(backup_file, dtype=str), warnings_list
-        return df_fresh, warnings_list
+            warnings_list.append("⚠️ Peringatan Krusial: Tarikan dari Sheet AIMS_Master kosong/gagal. Menggunakan 100% Salinan Backup Lokal.")
+            try:
+                df_backup = pd.read_csv(backup_file, dtype=str)
+                return df_backup, warnings_list
+            except Exception as e:
+                warnings_list.append(f"⚠️ Gagal membaca salinan backup: {e}")
+                return df_fresh, warnings_list
+        else:
+            return df_fresh, ["⚠️ Peringatan: Data di Google Sheets kosong dan file backup lokal belum tersedia."]
 
+    # Skenario 2: Absensi Data & Penjahitan
     df_fresh_check = df_fresh.copy()
     df_fresh_check['KAT_CEK'] = df_fresh_check['KATEGORI'].astype(str).str.strip().str.upper()
     df_final = df_fresh.copy()
     
-    if os.path.exists(backup_file):
+    kategori_hilang = []
+    
+    # Deteksi mana yang hilang
+    for cat in kategori_krusial:
+        if df_fresh_check[df_fresh_check['KAT_CEK'] == cat].empty:
+            kategori_hilang.append(cat)
+
+    # Proses menjahit data dari backup untuk kategori yang hilang
+    if kategori_hilang and os.path.exists(backup_file):
         try:
             df_backup = pd.read_csv(backup_file, dtype=str)
             if 'KATEGORI' in df_backup.columns:
                 df_backup['KAT_CEK'] = df_backup['KATEGORI'].astype(str).str.strip().str.upper()
-                for cat in kategori_krusial:
-                    if df_fresh_check[df_fresh_check['KAT_CEK'] == cat].empty:
-                        df_cat_backup = df_backup[df_backup['KAT_CEK'] == cat]
-                        if not df_cat_backup.empty:
-                            df_cat_backup_clean = df_cat_backup.drop(columns=['KAT_CEK'], errors='ignore')
-                            df_final = pd.concat([df_final, df_cat_backup_clean], ignore_index=True)
-                            warnings_list.append(f"⚠️ Peringatan: Sumber Kategori '{cat}' terdeteksi kosong di Google Sheets. Menggabungkan dengan Salinan Backup Lokal.")
+                
+                for cat in kategori_hilang:
+                    df_cat_backup = df_backup[df_backup['KAT_CEK'] == cat]
+                    if not df_cat_backup.empty:
+                        # Buang kolom KAT_CEK dari data backup sebelum digabung
+                        df_cat_backup_clean = df_cat_backup.drop(columns=['KAT_CEK'], errors='ignore')
+                        df_final = pd.concat([df_final, df_cat_backup_clean], ignore_index=True)
+                        warnings_list.append(f"⚠️ Peringatan: Sumber Kategori '{cat}' terdeteksi ERROR. Menampilkan data '{cat}' dari Salinan Backup Lokal.")
         except Exception:
             pass
 
+    # Skenario 3: Simpan Backup HANYA dari df_final yang sudah utuh/dijahit
+    # Pastikan kolom sementara 'KAT_CEK' dibuang sebelum disave
+    if 'KAT_CEK' in df_final.columns:
+        df_final = df_final.drop(columns=['KAT_CEK'])
+        
     try:
         df_final.to_csv(backup_file, index=False)
     except Exception:
@@ -320,7 +344,7 @@ def apply_fallback_logic(df_fresh):
 
     return df_final, warnings_list
 
-# Master Data perlu ditarik di awal karena memuat peringatan global dan kalkulasi dasar
+# Eksekusi tarikan master dan validasi fallback
 df_master_fresh = load_data_gspread("AIMS_Master")
 df_master, master_warnings = apply_fallback_logic(df_master_fresh)
 
@@ -404,7 +428,6 @@ if menu_pilihan == "Home":
 # 5. LOGIKA HALAMAN ⭐ MRI PROJECT
 # ==========================================
 elif menu_pilihan == "⭐ MRI PROJECT":
-    # MARIA FIX: Lazy Loading. Data ini ditarik KHUSUS saat menu MRI di klik
     df_mri = load_data_gspread("Problem MRI 2025/26 Harian")
     df_slm = load_data_gspread("SLM Visit Log")
     
@@ -479,7 +502,6 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             
             st.markdown(f"<div class='section-title'>Tiering by TID (Complain)</div>", unsafe_allow_html=True)
             t = mri_complain["tiers"]
-            # MARIA FIX: Optimasi string concat dengan list comprehension / join string yang lebih bersih
             html_tier_rows = "".join([f"<tr><td style='font-weight:600;'>{label}</td><td>{fmt_vis(t[label][0])}</td><td>{fmt_vis(t[label][1], show_w1)}</td><td>{fmt_vis(t[label][2], show_w2)}</td><td>{fmt_vis(t[label][3], show_w3)}</td><td>{fmt_vis(t[label][4], show_w4)}</td><td style='font-weight:700;'>{fmt_vis(t[label][5])}</td></tr>" for label in ["1 kali", "2-3 kali", "> 3 kali"]])
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width: 18%;'>Tiering</th><th style='width: 16%;'>{prev_lbl}</th><th style='width: 12%;'>W1</th><th style='width: 12%;'>W2</th><th style='width: 12%;'>W3</th><th style='width: 12%;'>W4</th><th style='width: 18%;'>{curr_lbl}</th></tr>{html_tier_rows}</table></div>", unsafe_allow_html=True)
 
@@ -516,7 +538,6 @@ elif menu_pilihan == "⭐ MRI PROJECT":
 # 6. LOGIKA PANDAS DINAMIS (MASTER MONITORING)
 # ==========================================
 elif menu_pilihan in kategori_valid:
-    # MARIA FIX: Lazy Loading! Semua tabel pembantu hanya dipanggil jika kita masuk menu monitoring ini.
     df_slm = load_data_gspread("SLM Visit Log")
     df_kelolaan = load_data_gspread("Jml_Kelolaan", "A1:B10")
     df_analisa = load_data_gspread("Analisa_dan_Perbaikan") 
@@ -714,8 +735,6 @@ elif menu_pilihan == "Logistic":
         st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
         
         th_html = "".join([f"<th style='text-align:left;'>{col}</th>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] else f"<th>{col}</th>" for col in df.columns])
-        
-        # MARIA FIX: String concat ke join list comprehension untuk render tabel logistik
         rows_html = "".join([f"<tr>{''.join([f'<td style=\"text-align:left; white-space:nowrap;\" if col.upper() in [\"KANWIL\", \"KANTOR LAYANAN\"] else \"text-align:center;\">{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != \"nan\" else \"-\"}</td>' for col in df.columns])}</tr>" for _, row in df.iterrows()])
         
         st.markdown(f"<div class='table-scroll' style='max-height: 400px;'><table class='log-table'><thead><tr>{th_html}</tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
