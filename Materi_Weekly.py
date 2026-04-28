@@ -236,12 +236,7 @@ st.markdown("""
             
             .home-card { margin-bottom: 10px; }
             
-            /* Penyesuaian header text di mobile */
-            .header-title-text {
-                font-size: 14px !important;
-                padding-left: 8px !important;
-                margin-left: 8px !important;
-            }
+            .header-title-text { font-size: 14px !important; padding-left: 8px !important; margin-left: 8px !important; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -286,6 +281,7 @@ def load_data_gspread(worksheet_name, range_name=None):
         st.error(f"Gagal Load {worksheet_name}: {e}")
         return pd.DataFrame()
 
+@st.cache_data(ttl=3600)
 def apply_fallback_logic(df_fresh):
     backup_file = "backup_AIMS_Master.csv"
     kategori_krusial = ["ELASTIC", "COMPLAIN", "DF REPEAT", "OUT FLM"]
@@ -293,29 +289,43 @@ def apply_fallback_logic(df_fresh):
 
     if df_fresh.empty or 'KATEGORI' not in df_fresh.columns:
         if os.path.exists(backup_file):
-            warnings_list.append("⚠️ Peringatan Krusial: Sheet AIMS_Master gagal ditarik atau kosong total. Menggunakan Salinan Backup Lokal.")
-            return pd.read_csv(backup_file, dtype=str), warnings_list
-        return df_fresh, warnings_list
+            warnings_list.append("⚠️ Peringatan Krusial: Tarikan dari Sheet AIMS_Master kosong/gagal. Menggunakan 100% Salinan Backup Lokal.")
+            try:
+                df_backup = pd.read_csv(backup_file, dtype=str)
+                return df_backup, warnings_list
+            except Exception as e:
+                warnings_list.append(f"⚠️ Gagal membaca salinan backup: {e}")
+                return df_fresh, warnings_list
+        else:
+            return df_fresh, ["⚠️ Peringatan: Data di Google Sheets kosong dan file backup lokal belum tersedia."]
 
     df_fresh_check = df_fresh.copy()
     df_fresh_check['KAT_CEK'] = df_fresh_check['KATEGORI'].astype(str).str.strip().str.upper()
     df_final = df_fresh.copy()
     
-    if os.path.exists(backup_file):
+    kategori_hilang = []
+    for cat in kategori_krusial:
+        if df_fresh_check[df_fresh_check['KAT_CEK'] == cat].empty:
+            kategori_hilang.append(cat)
+
+    if kategori_hilang and os.path.exists(backup_file):
         try:
             df_backup = pd.read_csv(backup_file, dtype=str)
             if 'KATEGORI' in df_backup.columns:
                 df_backup['KAT_CEK'] = df_backup['KATEGORI'].astype(str).str.strip().str.upper()
-                for cat in kategori_krusial:
-                    if df_fresh_check[df_fresh_check['KAT_CEK'] == cat].empty:
-                        df_cat_backup = df_backup[df_backup['KAT_CEK'] == cat]
-                        if not df_cat_backup.empty:
-                            df_cat_backup_clean = df_cat_backup.drop(columns=['KAT_CEK'], errors='ignore')
-                            df_final = pd.concat([df_final, df_cat_backup_clean], ignore_index=True)
-                            warnings_list.append(f"⚠️ Peringatan: Sumber Kategori '{cat}' terdeteksi kosong di Google Sheets. Menggabungkan dengan Salinan Backup Lokal.")
+                
+                for cat in kategori_hilang:
+                    df_cat_backup = df_backup[df_backup['KAT_CEK'] == cat]
+                    if not df_cat_backup.empty:
+                        df_cat_backup_clean = df_cat_backup.drop(columns=['KAT_CEK'], errors='ignore')
+                        df_final = pd.concat([df_final, df_cat_backup_clean], ignore_index=True)
+                        warnings_list.append(f"⚠️ Peringatan: Sumber Kategori '{cat}' terdeteksi ERROR. Menampilkan data '{cat}' dari Salinan Backup Lokal.")
         except Exception:
             pass
 
+    if 'KAT_CEK' in df_final.columns:
+        df_final = df_final.drop(columns=['KAT_CEK'])
+        
     try:
         df_final.to_csv(backup_file, index=False)
     except Exception:
@@ -326,25 +336,9 @@ def apply_fallback_logic(df_fresh):
 df_master_fresh = load_data_gspread("AIMS_Master")
 df_master, master_warnings = apply_fallback_logic(df_master_fresh)
 
-df_slm = load_data_gspread("SLM Visit Log")
-df_fup_elastic = load_data_gspread("Summary_Monitoring_Cash", "U3:Y7") 
-df_fup_complain = load_data_gspread("Summary_Monitoring_Cash", "U17:Y20") 
-df_kelolaan = load_data_gspread("Jml_Kelolaan", "A1:B10")
-df_analisa = load_data_gspread("Analisa_dan_Perbaikan") 
-
-total_atm = 0
-dict_kelolaan = {}
-if not df_kelolaan.empty and 'CABANG' in df_kelolaan.columns and 'TTL ATM' in df_kelolaan.columns:
-    df_kelolaan['TTL ATM'] = pd.to_numeric(df_kelolaan['TTL ATM'], errors='coerce').fillna(0)
-    total_atm = int(df_kelolaan['TTL ATM'].sum())
-    for _, row in df_kelolaan.iterrows():
-        if pd.notnull(row['CABANG']):
-            dict_kelolaan[str(row['CABANG']).strip().upper()] = str(int(row['TTL ATM']))
-
 current_date_full = datetime.now().strftime("%A, %d %B %Y")
 current_date_header = current_date_full.upper()
 
-# REVISI MARIA: PERBAIKAN LOGO GANDA & JUDUL LEBIH ELEGAN
 st.markdown(f"<div class='main-header'><div style='display: flex; align-items: center; white-space: nowrap;'><img src='https://upload.wikimedia.org/wikipedia/commons/9/97/Logo_BRI.png' style='height: 28px; filter: brightness(0) invert(1);' alt='Logo BRI'><span class='header-title-text' style='margin-left: 15px; padding-left: 15px; border-left: 2px solid #F37021; color: #FFFFFF; font-weight: 700; font-size: 18px; letter-spacing: 2px; text-shadow: 1px 1px 3px rgba(0,0,0,0.3);'>WEEKLY ATM PERFORMANCE REVIEW</span></div><div class='info-ticker-container'><div class='info-ticker-text'><span class='status-dot'></span>SYSTEM: SECURE & OPTIMAL &nbsp; | &nbsp; DATA LOADED &nbsp; | &nbsp; SERVER TIME: {current_date_header} &nbsp; | &nbsp; BANK BRI MONITORING ACTIVE &nbsp; | &nbsp; <span style='color: #FBBF24; font-weight: 800; letter-spacing: 1px;'>PT KELOLA JASA ARTHA</span></div></div></div>", unsafe_allow_html=True)
 
 for msg in master_warnings:
@@ -366,7 +360,6 @@ with col_filter1:
 with col_filter2:
     selected_week = st.selectbox("Minggu", ["W1", "W2", "W3", "W4"], index=2, label_visibility="collapsed")
 
-# GLOBAL ACTIVE WEEKS FILTER (SOLUSI BUG TOTAL PENJUMLAHAN)
 show_w1 = selected_week in ['W1', 'W2', 'W3', 'W4']
 show_w2 = selected_week in ['W2', 'W3', 'W4']
 show_w3 = selected_week in ['W3', 'W4']
@@ -424,6 +417,7 @@ if menu_pilihan == "Home":
 # ==========================================
 elif menu_pilihan == "⭐ MRI PROJECT":
     df_mri = load_data_gspread("Problem MRI 2025/26 Harian")
+    df_slm = load_data_gspread("SLM Visit Log")
     
     if df_mri.empty:
         st.warning("Bah! Data MRI Project kosong. Periksa worksheet 'Problem MRI 2025/26 Harian'!")
@@ -435,14 +429,12 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             if 'WEEK' in df_filter.columns: df_filter['WEEK_CLN'] = df_filter['WEEK'].astype(str).str.strip().str.upper()
             else: df_filter['WEEK_CLN'] = ""
             
-            # Menerapkan active_weeks untuk memfilter kebocoran data
             v_prev = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == prev_month) & (df_filter['WEEK_CLN'].isin(['W1', 'W2', 'W3', 'W4']))])
             v_w1 = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W1')])
             v_w2 = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W2')])
             v_w3 = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W3')])
             v_w4 = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W4')])
             
-            # v_total SEKARANG HANYA menjumlahkan minggu yang aktif sesuai dropdown
             v_total = len(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'].isin(active_weeks))])
 
             def get_tiers(sub_df):
@@ -456,7 +448,6 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             t_w3 = get_tiers(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W3')])
             t_w4 = get_tiers(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'] == 'W4')])
             
-            # t_total SEKARANG HANYA berdasarkan minggu yang aktif sesuai dropdown
             t_total = get_tiers(df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'].isin(active_weeks))])
 
             df_curr = df_filter[(df_filter['BULAN'].astype(str).str.upper() == selected_month) & (df_filter['WEEK_CLN'].isin(active_weeks))].copy()
@@ -499,32 +490,16 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             
             st.markdown(f"<div class='section-title'>Tiering by TID (Complain)</div>", unsafe_allow_html=True)
             t = mri_complain["tiers"]
-            html_tier = f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width: 18%;'>Tiering</th><th style='width: 16%;'>{prev_lbl}</th><th style='width: 12%;'>W1</th><th style='width: 12%;'>W2</th><th style='width: 12%;'>W3</th><th style='width: 12%;'>W4</th><th style='width: 18%;'>{curr_lbl}</th></tr>"
-            for label in ["1 kali", "2-3 kali", "> 3 kali"]:
-                vals = t[label]
-                html_tier += f"<tr><td style='font-weight:600;'>{label}</td><td>{fmt_vis(vals[0])}</td><td>{fmt_vis(vals[1], show_w1)}</td><td>{fmt_vis(vals[2], show_w2)}</td><td>{fmt_vis(vals[3], show_w3)}</td><td>{fmt_vis(vals[4], show_w4)}</td><td style='font-weight:700;'>{fmt_vis(vals[5])}</td></tr>"
-            html_tier += "</table></div>"
-            st.markdown(html_tier, unsafe_allow_html=True)
+            html_tier_rows = "".join([f"<tr><td style='font-weight:600;'>{label}</td><td>{fmt_vis(t[label][0])}</td><td>{fmt_vis(t[label][1], show_w1)}</td><td>{fmt_vis(t[label][2], show_w2)}</td><td>{fmt_vis(t[label][3], show_w3)}</td><td>{fmt_vis(t[label][4], show_w4)}</td><td style='font-weight:700;'>{fmt_vis(t[label][5])}</td></tr>" for label in ["1 kali", "2-3 kali", "> 3 kali"]])
+            st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width: 18%;'>Tiering</th><th style='width: 16%;'>{prev_lbl}</th><th style='width: 12%;'>W1</th><th style='width: 12%;'>W2</th><th style='width: 12%;'>W3</th><th style='width: 12%;'>W4</th><th style='width: 18%;'>{curr_lbl}</th></tr>{html_tier_rows}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Top Complain Problem Terminal IDs</div>", unsafe_allow_html=True)
             df_top_c = mri_complain["top_tid"]
-            html_top_c = ""
-            if not df_top_c.empty:
-                for i, (tid, row) in enumerate(df_top_c.iterrows(), 1):
-                    html_top_c += f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{row['Location']}'>{row['Location']}</td><td>{row['Branch']}</td><td>{row['SLM_Vendor']}</td><td>{fmt_vis(row['W1'], show_w1)}</td><td>{fmt_vis(row['W2'], show_w2)}</td><td>{fmt_vis(row['W3'], show_w3)}</td><td>{fmt_vis(row['W4'], show_w4)}</td></tr>"
-            else: html_top_c = f"<tr><td colspan='9' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Nihil Problem Complain di {selected_week}</td></tr>"
+            html_top_c = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{row['Location']}'>{row['Location']}</td><td>{row['Branch']}</td><td>{row['SLM_Vendor']}</td><td>{fmt_vis(row['W1'], show_w1)}</td><td>{fmt_vis(row['W2'], show_w2)}</td><td>{fmt_vis(row['W3'], show_w3)}</td><td>{fmt_vis(row['W4'], show_w4)}</td></tr>" for i, (tid, row) in enumerate(df_top_c.iterrows(), 1)]) if not df_top_c.empty else f"<tr><td colspan='9' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Nihil Problem Complain di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th>Branch</th><th>SLM</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th></tr>{html_top_c}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Follow-up Teknisi (Complain)</div>", unsafe_allow_html=True)
-            html_fup_c = ""
-            if not df_top_c.empty:
-                for i, tid in enumerate(df_top_c.index, 1):
-                    slm_row = df_slm[df_slm['TID'] == tid]
-                    visit_date = slm_row.iloc[0].get('TGL VISIT SLM', '-') if not slm_row.empty else '-'
-                    action = slm_row.iloc[0].get('ACTION', 'Belum ada log') if not slm_row.empty else 'Belum ada log'
-                    loc = df_top_c.loc[tid, 'Location']
-                    html_fup_c += f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{loc}'>{loc}</td><td style='text-align:left;'>{visit_date}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{action}'>{action}</td></tr>"
-            else: html_fup_c = f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Complain di {selected_week}</td></tr>"
+            html_fup_c = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_c.loc[tid, 'Location']}'>{df_top_c.loc[tid, 'Location']}</td><td style='text-align:left;'>{df_slm[df_slm['TID'] == tid].iloc[0].get('TGL VISIT SLM', '-') if not df_slm[df_slm['TID'] == tid].empty else '-'}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}'>{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}</td></tr>" for i, tid in enumerate(df_top_c.index, 1)]) if not df_top_c.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Complain di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>TGL VISIT</th><th style='text-align:left;'>Action</th></tr>{html_fup_c}</table></div>", unsafe_allow_html=True)
 
         with col_mri_right:
@@ -535,38 +510,35 @@ elif menu_pilihan == "⭐ MRI PROJECT":
 
             st.markdown(f"<div class='section-title'>Tiering by TID (Df Repeat)</div>", unsafe_allow_html=True)
             t = mri_dfrepeat["tiers"]
-            html_tier = f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width: 18%;'>Tiering</th><th style='width: 16%;'>{prev_lbl}</th><th style='width: 12%;'>W1</th><th style='width: 12%;'>W2</th><th style='width: 12%;'>W3</th><th style='width: 12%;'>W4</th><th style='width: 18%;'>{curr_lbl}</th></tr>"
-            for label in ["1 kali", "2-3 kali", "> 3 kali"]:
-                vals = t[label]
-                html_tier += f"<tr><td style='font-weight:600;'>{label}</td><td>{fmt_vis(vals[0])}</td><td>{fmt_vis(vals[1], show_w1)}</td><td>{fmt_vis(vals[2], show_w2)}</td><td>{fmt_vis(vals[3], show_w3)}</td><td>{fmt_vis(vals[4], show_w4)}</td><td style='font-weight:700;'>{fmt_vis(vals[5])}</td></tr>"
-            html_tier += "</table></div>"
-            st.markdown(html_tier, unsafe_allow_html=True)
+            html_tier_rows = "".join([f"<tr><td style='font-weight:600;'>{label}</td><td>{fmt_vis(t[label][0])}</td><td>{fmt_vis(t[label][1], show_w1)}</td><td>{fmt_vis(t[label][2], show_w2)}</td><td>{fmt_vis(t[label][3], show_w3)}</td><td>{fmt_vis(t[label][4], show_w4)}</td><td style='font-weight:700;'>{fmt_vis(t[label][5])}</td></tr>" for label in ["1 kali", "2-3 kali", "> 3 kali"]])
+            st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width: 18%;'>Tiering</th><th style='width: 16%;'>{prev_lbl}</th><th style='width: 12%;'>W1</th><th style='width: 12%;'>W2</th><th style='width: 12%;'>W3</th><th style='width: 12%;'>W4</th><th style='width: 18%;'>{curr_lbl}</th></tr>{html_tier_rows}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Top Df Repeat Problem Terminal IDs</div>", unsafe_allow_html=True)
             df_top_d = mri_dfrepeat["top_tid"]
-            html_top_d = ""
-            if not df_top_d.empty:
-                for i, (tid, row) in enumerate(df_top_d.iterrows(), 1):
-                    html_top_d += f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{row['Location']}'>{row['Location']}</td><td>{row['Branch']}</td><td>{row['SLM_Vendor']}</td><td>{fmt_vis(row['W1'], show_w1)}</td><td>{fmt_vis(row['W2'], show_w2)}</td><td>{fmt_vis(row['W3'], show_w3)}</td><td>{fmt_vis(row['W4'], show_w4)}</td></tr>"
-            else: html_top_d = f"<tr><td colspan='9' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Nihil Problem Df Repeat di {selected_week}</td></tr>"
+            html_top_d = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{row['Location']}'>{row['Location']}</td><td>{row['Branch']}</td><td>{row['SLM_Vendor']}</td><td>{fmt_vis(row['W1'], show_w1)}</td><td>{fmt_vis(row['W2'], show_w2)}</td><td>{fmt_vis(row['W3'], show_w3)}</td><td>{fmt_vis(row['W4'], show_w4)}</td></tr>" for i, (tid, row) in enumerate(df_top_d.iterrows(), 1)]) if not df_top_d.empty else f"<tr><td colspan='9' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Nihil Problem Df Repeat di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th>Branch</th><th>SLM</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th></tr>{html_top_d}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Follow-up Teknisi (Df Repeat)</div>", unsafe_allow_html=True)
-            html_fup_d = ""
-            if not df_top_d.empty:
-                for i, tid in enumerate(df_top_d.index, 1):
-                    slm_row = df_slm[df_slm['TID'] == tid]
-                    visit_date = slm_row.iloc[0].get('TGL VISIT SLM', '-') if not slm_row.empty else '-'
-                    action = slm_row.iloc[0].get('ACTION', 'Belum ada log') if not slm_row.empty else 'Belum ada log'
-                    loc = df_top_d.loc[tid, 'Location']
-                    html_fup_d += f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{loc}'>{loc}</td><td style='text-align:left;'>{visit_date}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{action}'>{action}</td></tr>"
-            else: html_fup_d = f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Df Repeat di {selected_week}</td></tr>"
+            html_fup_d = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_d.loc[tid, 'Location']}'>{df_top_d.loc[tid, 'Location']}</td><td style='text-align:left;'>{df_slm[df_slm['TID'] == tid].iloc[0].get('TGL VISIT SLM', '-') if not df_slm[df_slm['TID'] == tid].empty else '-'}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}'>{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}</td></tr>" for i, tid in enumerate(df_top_d.index, 1)]) if not df_top_d.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Df Repeat di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>TGL VISIT</th><th style='text-align:left;'>Action</th></tr>{html_fup_d}</table></div>", unsafe_allow_html=True)
 
 # ==========================================
 # 6. LOGIKA PANDAS DINAMIS (MASTER MONITORING)
 # ==========================================
 elif menu_pilihan in kategori_valid:
+    df_slm = load_data_gspread("SLM Visit Log")
+    df_kelolaan = load_data_gspread("Jml_Kelolaan", "A1:B10")
+    df_analisa = load_data_gspread("Analisa_dan_Perbaikan") 
+
+    total_atm = 0
+    dict_kelolaan = {}
+    if not df_kelolaan.empty and 'CABANG' in df_kelolaan.columns and 'TTL ATM' in df_kelolaan.columns:
+        df_kelolaan['TTL ATM'] = pd.to_numeric(df_kelolaan['TTL ATM'], errors='coerce').fillna(0)
+        total_atm = int(df_kelolaan['TTL ATM'].sum())
+        for _, row in df_kelolaan.iterrows():
+            if pd.notnull(row['CABANG']):
+                dict_kelolaan[str(row['CABANG']).strip().upper()] = str(int(row['TTL ATM']))
+
     current_cat = menu_pilihan.upper()
     val_prev = val_w1 = val_w2 = val_w3 = val_w4 = val_total = val_avg = 0
     tier_prev = tier_w1 = tier_w2 = tier_w3 = tier_w4 = tier_total = {"1 kali": 0, "2-3 kali": 0, "> 3 kali": 0}
@@ -581,8 +553,8 @@ elif menu_pilihan in kategori_valid:
             val = str(temp_df.iloc[0, col_idx])
             text_analisa_val = val if val.lower() != 'nan' else ""
             
-    if current_cat == 'ELASTIC': df_followup_view = df_fup_elastic
-    elif current_cat == 'COMPLAIN': df_followup_view = df_fup_complain
+    if current_cat == 'ELASTIC': df_followup_view = load_data_gspread("Summary_Monitoring_Cash", "U3:Y7")
+    elif current_cat == 'COMPLAIN': df_followup_view = load_data_gspread("Summary_Monitoring_Cash", "U17:Y20")
     else: df_followup_view = pd.DataFrame() 
     
     if not df_master.empty and 'KATEGORI' in df_master.columns:
@@ -597,9 +569,8 @@ elif menu_pilihan in kategori_valid:
         prev_counts_tid = df_prev_m.groupby('TID')['VAL_METRIC'].sum()
         prev_counts_branch = df_prev_m.groupby('CABANG')['VAL_METRIC'].sum()
         
-        # REVISI MARIA (FIX TOTAL): df_curr_m HANYA menarik data berdasarkan active_weeks dari dropdown
         df_curr_m = df_cat[(df_cat['BULAN'].astype(str).str.upper() == selected_month) & (df_cat['WEEK_CLN'].isin(active_weeks))]
-        val_total = df_curr_m['VAL_METRIC'].sum() # SEKARANG TOTAL PASTI KLOP DENGAN MINGGU YANG AKTIF
+        val_total = df_curr_m['VAL_METRIC'].sum() 
         
         val_w1 = df_curr_m[df_curr_m['WEEK_CLN'] == 'W1']['VAL_METRIC'].sum()
         val_w2 = df_curr_m[df_curr_m['WEEK_CLN'] == 'W2']['VAL_METRIC'].sum()
@@ -656,8 +627,7 @@ elif menu_pilihan in kategori_valid:
             html_t3_rows, table_structure = "", ""
             if current_cat == 'ELASTIC':
                 if not df_followup_view.empty:
-                    for _, row in df_followup_view.iterrows():
-                        html_t3_rows += f"<tr><td style='text-align:left;'>{str(row.iloc[0])}</td><td style='text-align:center;'>{fmt_vis(row.iloc[1], True)}</td><td style='text-align:center;'>{fmt_vis(row.iloc[2], True)}</td><td style='font-weight:600; text-align:center;'>{fmt_vis(row.iloc[3], True)}</td><td style='color:#00529C; font-weight:600; text-align:center;'>{fmt_vis(row.iloc[4], True) if len(row) > 4 else ''}</td></tr>"
+                    html_t3_rows = "".join([f"<tr><td style='text-align:left;'>{str(row.iloc[0])}</td><td style='text-align:center;'>{fmt_vis(row.iloc[1], True)}</td><td style='text-align:center;'>{fmt_vis(row.iloc[2], True)}</td><td style='font-weight:600; text-align:center;'>{fmt_vis(row.iloc[3], True)}</td><td style='color:#00529C; font-weight:600; text-align:center;'>{fmt_vis(row.iloc[4], True) if len(row) > 4 else ''}</td></tr>" for _, row in df_followup_view.iterrows()])
                 else: html_t3_rows = "<tr><td colspan='5'>Data Kosong</td></tr>"
                 table_structure = f"<tr><th style='text-align: left; width: 50%;'>STATUS</th><th>Pending</th><th>Done</th><th>Total</th><th>% TL</th></tr>{html_t3_rows}"
             elif current_cat == 'COMPLAIN':
@@ -754,16 +724,16 @@ elif menu_pilihan == "Logistic":
         
         th_html = "".join([f"<th style='text-align:left;'>{col}</th>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] else f"<th>{col}</th>" for col in df.columns])
         
-        rows_html = ""
-        for _, row in df.iterrows():
-            tr = "<tr>"
-            for col in df.columns:
-                val = str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'
-                align_style = "text-align:left; white-space:nowrap;" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] else "text-align:center;"
-                tr += f"<td style='{align_style}'>{val}</td>"
-            tr += "</tr>"
-            rows_html += tr
-            
+        # PERBAIKAN MARIA: Mengeluarkan kondisional if-else dari dalam f-string untuk mencegah syntax error
+        rows_html = "".join([
+            "<tr>" + "".join([
+                f"<td style='text-align:left; white-space:nowrap;'>{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'}</td>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] 
+                else f"<td style='text-align:center;'>{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'}</td>"
+                for col in df.columns
+            ]) + "</tr>" 
+            for _, row in df.iterrows()
+        ])
+        
         st.markdown(f"<div class='table-scroll' style='max-height: 400px;'><table class='log-table'><thead><tr>{th_html}</tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
 
     tab_log_utama = st.radio("MainTab", ["Stock Sparepart", "Stock Cassette", "Preventive Maintenance (PM)"], horizontal=True, label_visibility="collapsed")
