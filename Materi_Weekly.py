@@ -671,57 +671,16 @@ elif menu_pilihan in kategori_valid:
         else: html_t5_rows = "<tr><td colspan='5'>No Data</td></tr>"
         st.markdown(f"<div class='table-scroll'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>Visit Date</th><th style='text-align:left;'>Action</th></tr>{html_t5_rows}</table></div>", unsafe_allow_html=True)
 
-        # ==========================================
-        # REVISI MARIA: PERBAIKAN GRAFIK PLOTLY AGAR ELEGAN & TIDAK TABRAKAN
-        # ==========================================
         st.markdown(f"<div class='section-title'>Top {menu_pilihan} Problem Branches</div>", unsafe_allow_html=True)
         col_curr, col_prev = (('W4', 'W3') if selected_week == 'W4' else (('W3', 'W2') if selected_week == 'W3' else (('W2', 'W1') if selected_week == 'W2' else ('W1', 'PREV'))))
         df_chart = df_top_branch.head(5)
-        
         if not df_chart.empty:
             fig = go.Figure()
             y_c, y_p = df_chart[col_curr].tolist(), df_chart[col_prev].tolist()
             l_p = prev_month[:3].capitalize() if col_prev == 'PREV' else col_prev
-            
-            # Line untuk Previous Week (Teks di bawah marker, warna redup, garis putus-putus)
-            fig.add_trace(go.Scatter(
-                x=df_chart.index.tolist(), 
-                y=y_p, 
-                mode='lines+markers+text', 
-                name=l_p, 
-                text=[str(int(v)) if v > 0 else "" for v in y_p], 
-                textposition='bottom center', 
-                textfont=dict(size=10, color='#64748B'),
-                line=dict(color='#94A3B8', width=2, shape='spline', dash='dot'),
-                marker=dict(size=6, color='#64748B')
-            ))
-            
-            # Line untuk Current Week (Teks di atas marker, warna mencolok, tebal)
-            fig.add_trace(go.Scatter(
-                x=df_chart.index.tolist(), 
-                y=y_c, 
-                mode='lines+markers+text', 
-                name=col_curr, 
-                text=[str(int(v)) if v > 0 else "" for v in y_c], 
-                textposition='top center', 
-                textfont=dict(size=12, color='#D97706', family='Arial Black'),
-                line=dict(color='#F37021', width=3.5, shape='spline'),
-                marker=dict(size=8, color='#F37021', symbol='circle', line=dict(color='white', width=1.5))
-            ))
-            
-            # Perhitungan headroom dinamis agar angka di pucuk tidak terpotong (dikalikan 1.6)
-            max_y = max(max(y_p) if y_p else [0], max(y_c) if y_c else [0], 1)
-            
-            fig.update_layout(
-                margin=dict(l=10, r=10, t=35, b=10), 
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)), 
-                xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#475569')), 
-                yaxis=dict(showgrid=True, gridcolor='#F1F5F9', range=[0, max_y * 1.6], showticklabels=False), 
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)',
-                height=150,
-                hovermode="x unified"
-            )
+            fig.add_trace(go.Scatter(x=df_chart.index.tolist(), y=y_p, mode='lines+markers+text', name=l_p, text=[str(int(v)) if v > 0 else "" for v in y_p], textposition='top center', line=dict(color='#64748B', width=2, shape='spline')))
+            fig.add_trace(go.Scatter(x=df_chart.index.tolist(), y=y_c, mode='lines+markers+text', name=col_curr, text=[str(int(v)) if v > 0 else "" for v in y_c], textposition='top center', line=dict(color='#F37021', width=3, shape='spline')))
+            fig.update_layout(margin=dict(l=10, r=10, t=25, b=5), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="center", x=0.5), xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, range=[0, max(max(y_p), max(y_c), 1) * 1.4]), plot_bgcolor='rgba(0,0,0,0)', height=110)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         
         html_t6_rows = "".join([f"<tr><td>{i}</td><td>{dict_kelolaan.get(str(branch).strip().upper(), '')}</td><td style='text-align:left; font-weight:600;'>{branch}</td><td>{fmt_vis(row['PREV'], True)}</td><td>{fmt_vis(row['W1'], show_w1)}</td><td>{fmt_vis(row['W2'], show_w2)}</td><td>{fmt_vis(row['W3'], show_w3)}</td><td>{fmt_vis(row['W4'], show_w4)}</td><td style='font-weight:600;'>{fmt_vis(row['TOTAL'], True)}</td></tr>" for i, (branch, row) in enumerate(df_top_branch.iterrows(), 1)]) if not df_top_branch.empty else "<tr><td colspan='9'>No Data Available</td></tr>"
@@ -765,6 +724,7 @@ elif menu_pilihan == "Logistic":
         
         th_html = "".join([f"<th style='text-align:left;'>{col}</th>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] else f"<th>{col}</th>" for col in df.columns])
         
+        # PERBAIKAN MARIA: Mengeluarkan kondisional if-else dari dalam f-string untuk mencegah syntax error
         rows_html = "".join([
             "<tr>" + "".join([
                 f"<td style='text-align:left; white-space:nowrap;'>{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'}</td>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] 
