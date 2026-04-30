@@ -419,6 +419,11 @@ elif menu_pilihan == "⭐ MRI PROJECT":
     df_mri = load_data_gspread("Problem MRI 2025/26 Harian")
     df_slm = load_data_gspread("SLM Visit Log")
     
+    # DICTIONARY MAPPING OPTIMIZATION BY MARIA
+    df_slm_unique = df_slm.drop_duplicates('TID') if not df_slm.empty else pd.DataFrame()
+    dict_slm_tgl = df_slm_unique.set_index('TID')['TGL VISIT SLM'].to_dict() if not df_slm_unique.empty and 'TGL VISIT SLM' in df_slm_unique.columns else {}
+    dict_slm_act = df_slm_unique.set_index('TID')['ACTION'].to_dict() if not df_slm_unique.empty and 'ACTION' in df_slm_unique.columns else {}
+
     if df_mri.empty:
         st.warning("Bah! Data MRI Project kosong. Periksa worksheet 'Problem MRI 2025/26 Harian'!")
     else:
@@ -499,7 +504,8 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th>Branch</th><th>SLM</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th></tr>{html_top_c}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Follow-up Teknisi (Complain)</div>", unsafe_allow_html=True)
-            html_fup_c = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_c.loc[tid, 'Location']}'>{df_top_c.loc[tid, 'Location']}</td><td style='text-align:left;'>{df_slm[df_slm['TID'] == tid].iloc[0].get('TGL VISIT SLM', '-') if not df_slm[df_slm['TID'] == tid].empty else '-'}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}'>{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}</td></tr>" for i, tid in enumerate(df_top_c.index, 1)]) if not df_top_c.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Complain di {selected_week}</td></tr>"
+            # IMPLEMENTASI OPTIMASI DICTIONARY GETTER OLEH MARIA (NO LOOP SEARCH)
+            html_fup_c = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_c.loc[tid, 'Location']}'>{df_top_c.loc[tid, 'Location']}</td><td style='text-align:left;'>{dict_slm_tgl.get(tid, '-')}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{dict_slm_act.get(tid, 'Belum ada log')}'>{dict_slm_act.get(tid, 'Belum ada log')}</td></tr>" for i, tid in enumerate(df_top_c.index, 1)]) if not df_top_c.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Complain di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>TGL VISIT</th><th style='text-align:left;'>Action</th></tr>{html_fup_c}</table></div>", unsafe_allow_html=True)
 
         with col_mri_right:
@@ -519,7 +525,8 @@ elif menu_pilihan == "⭐ MRI PROJECT":
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th>Branch</th><th>SLM</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th></tr>{html_top_d}</table></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='section-title'>Follow-up Teknisi (Df Repeat)</div>", unsafe_allow_html=True)
-            html_fup_d = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_d.loc[tid, 'Location']}'>{df_top_d.loc[tid, 'Location']}</td><td style='text-align:left;'>{df_slm[df_slm['TID'] == tid].iloc[0].get('TGL VISIT SLM', '-') if not df_slm[df_slm['TID'] == tid].empty else '-'}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}'>{df_slm[df_slm['TID'] == tid].iloc[0].get('ACTION', 'Belum ada log') if not df_slm[df_slm['TID'] == tid].empty else 'Belum ada log'}</td></tr>" for i, tid in enumerate(df_top_d.index, 1)]) if not df_top_d.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Df Repeat di {selected_week}</td></tr>"
+            # IMPLEMENTASI OPTIMASI DICTIONARY GETTER OLEH MARIA (NO LOOP SEARCH)
+            html_fup_d = "".join([f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{df_top_d.loc[tid, 'Location']}'>{df_top_d.loc[tid, 'Location']}</td><td style='text-align:left;'>{dict_slm_tgl.get(tid, '-')}</td><td style='text-align:left; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;' title='{dict_slm_act.get(tid, 'Belum ada log')}'>{dict_slm_act.get(tid, 'Belum ada log')}</td></tr>" for i, tid in enumerate(df_top_d.index, 1)]) if not df_top_d.empty else f"<tr><td colspan='5' style='padding: 15px; font-weight: bold; color: #10B981; text-align: center;'>✅ Data Kosong - Tidak ada Follow-up Df Repeat di {selected_week}</td></tr>"
             st.markdown(f"<div class='table-scroll' style='max-height:unset;'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>TGL VISIT</th><th style='text-align:left;'>Action</th></tr>{html_fup_d}</table></div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -529,6 +536,11 @@ elif menu_pilihan in kategori_valid:
     df_slm = load_data_gspread("SLM Visit Log")
     df_kelolaan = load_data_gspread("Jml_Kelolaan", "A1:B10")
     df_analisa = load_data_gspread("Analisa_dan_Perbaikan") 
+
+    # DICTIONARY MAPPING OPTIMIZATION BY MARIA
+    df_slm_unique = df_slm.drop_duplicates('TID') if not df_slm.empty else pd.DataFrame()
+    dict_slm_tgl = df_slm_unique.set_index('TID')['TGL VISIT SLM'].to_dict() if not df_slm_unique.empty and 'TGL VISIT SLM' in df_slm_unique.columns else {}
+    dict_slm_act = df_slm_unique.set_index('TID')['ACTION'].to_dict() if not df_slm_unique.empty and 'ACTION' in df_slm_unique.columns else {}
 
     total_atm = 0
     dict_kelolaan = {}
@@ -663,10 +675,11 @@ elif menu_pilihan in kategori_valid:
 
         st.markdown(f"<div class='section-title'>{menu_pilihan} Issue Resolution Follow-up</div>", unsafe_allow_html=True)
         html_t5_rows = ""
+        # IMPLEMENTASI OPTIMASI DICTIONARY GETTER OLEH MARIA (NO LOOP SEARCH)
         if not df_top_tid.empty:
             for i, tid in enumerate(df_top_tid.index, 1):
-                slm_row = df_slm[df_slm['TID'] == tid]
-                visit_date, action = (slm_row.iloc[0].get('TGL VISIT SLM', '-'), slm_row.iloc[0].get('ACTION', '-')) if not slm_row.empty else ("-", "Belum ada log visit teknisi terbaru")
+                visit_date = dict_slm_tgl.get(tid, '-')
+                action = dict_slm_act.get(tid, 'Belum ada log visit teknisi terbaru')
                 html_t5_rows += f"<tr><td>{i}</td><td style='font-weight:600;'>{tid}</td><td style='text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;' title='{df_top_tid.loc[tid, 'Location']}'>{df_top_tid.loc[tid, 'Location']}</td><td style='text-align:left;'>{visit_date}</td><td style='text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px;' title='{action}'>{action}</td></tr>"
         else: html_t5_rows = "<tr><td colspan='5'>No Data</td></tr>"
         st.markdown(f"<div class='table-scroll'><table class='dash-table'><tr><th style='width:5%;'>NO</th><th style='width:10%;'>TID</th><th style='text-align:left; width:28%;'>Location</th><th style='text-align:left; width:15%;'>Visit Date</th><th style='text-align:left;'>Action</th></tr>{html_t5_rows}</table></div>", unsafe_allow_html=True)
@@ -719,19 +732,24 @@ elif menu_pilihan == "Logistic":
         except Exception as e: st.error(f"Gagal Load Block Logistik {worksheet_name}: {e}"); return pd.DataFrame()
 
     def render_logistic_table(df, title):
-        if df.empty: st.warning(f"Bah! Data {title} kosong!"); return
+        if df.empty: 
+            st.warning(f"Bah! Data {title} kosong!")
+            return
+            
         st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
         
         th_html = "".join([f"<th style='text-align:left;'>{col}</th>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] else f"<th>{col}</th>" for col in df.columns])
         
-        # PERBAIKAN MARIA: Mengeluarkan kondisional if-else dari dalam f-string untuk mencegah syntax error
+        # PERBAIKAN MARIA: MENGUBAH ITERROWS MENJADI TO_DICT AGAR JAUH LEBIH RINGAN
+        records = df.to_dict('records')
+        
         rows_html = "".join([
             "<tr>" + "".join([
                 f"<td style='text-align:left; white-space:nowrap;'>{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'}</td>" if col.upper() in ["KANWIL", "KANTOR LAYANAN"] 
                 else f"<td style='text-align:center;'>{str(row[col]) if pd.notna(row[col]) and str(row[col]).lower() != 'nan' else '-'}</td>"
                 for col in df.columns
             ]) + "</tr>" 
-            for _, row in df.iterrows()
+            for row in records
         ])
         
         st.markdown(f"<div class='table-scroll' style='max-height: 400px;'><table class='log-table'><thead><tr>{th_html}</tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
